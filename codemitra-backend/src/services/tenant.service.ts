@@ -26,8 +26,18 @@ export const tenantService = {
     return result.rows[0];
   },
 
+  async getBySlug(slug: string) {
+    const result = await pool.query(
+      'SELECT * FROM tenants WHERE slug = $1 AND is_deleted = FALSE LIMIT 1',
+      [slug]
+    );
+    if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Tenant not found');
+    return result.rows[0];
+  },
+
   async create(data: {
     name: string;
+    slug?: string;
     plan?: string;
     maxStudents?: number;
     contactEmail?: string;
@@ -41,7 +51,7 @@ export const tenantService = {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
       [
         data.name,
-        slug,
+        data.slug || slug,
         data.plan || 'trial',
         data.maxStudents || 50,
         data.contactEmail || null,
@@ -54,12 +64,16 @@ export const tenantService = {
   },
 
   async update(id: string, data: Record<string, any>) {
+    const mapped = { ...data };
+    for (const [from, to] of Object.entries({ maxStudents: 'max_students', isActive: 'is_active', contactEmail: 'contact_email', contactPhone: 'contact_phone', websiteUrl: 'website_url', planExpiresAt: 'plan_expires_at' })) {
+      if (from in mapped) mapped[to] = mapped[from];
+    }
     const allowed = ['name', 'plan', 'max_students', 'contact_email', 'contact_phone', 'website_url', 'address', 'is_active', 'plan_expires_at', 'settings'];
-    const fields = Object.keys(data).filter((k) => allowed.includes(k));
+    const fields = Object.keys(mapped).filter((k) => allowed.includes(k));
     if (fields.length === 0) throw new AppError(400, 'NO_FIELDS', 'No valid fields to update');
 
     const sets = fields.map((f, i) => `${f} = $${i + 2}`).join(', ');
-    const values = fields.map((f) => data[f]);
+    const values = fields.map((f) => mapped[f]);
 
     const result = await pool.query(
       `UPDATE tenants SET ${sets}, updated_at = NOW() WHERE id = $1 AND is_deleted = FALSE RETURNING *`,

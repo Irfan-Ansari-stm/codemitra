@@ -27,8 +27,11 @@ export const changePasswordSchema = z.object({
 // ── Tenant ────────────────────────────────────────────────────────────────────
 export const createTenantSchema = z.object({
   name: z.string().min(2).max(255),
+  slug: z.string().min(2).max(100).optional(),
   plan: z.enum(['trial', 'basic', 'pro', 'enterprise']).optional(),
   maxStudents: z.number().int().positive().optional(),
+  adminEmail: z.string().email().optional(),
+  adminName: z.string().min(2).max(255).optional(),
   contactEmail: z.string().email().optional(),
   contactPhone: z.string().max(30).optional(),
   websiteUrl: z.string().url().optional(),
@@ -50,6 +53,7 @@ export const updateUserSchema = z.object({
   bio: z.string().max(1000).optional(),
   avatarUrl: z.string().url().optional(),
   metadata: z.record(z.any()).optional(),
+  isActive: z.boolean().optional(),
 });
 
 // ── Course ────────────────────────────────────────────────────────────────────
@@ -58,12 +62,14 @@ export const createCourseSchema = z.object({
   description: z.string().max(2000).optional(),
   thumbnailUrl: z.string().url().optional(),
   languageTags: z.array(z.string()).optional(),
+  status: z.enum(['draft', 'published', 'archived']).optional(),
 });
 
 export const createModuleSchema = z.object({
   title: z.string().min(2).max(255),
   description: z.string().max(1000).optional(),
   orderIndex: z.number().int().min(0).optional(),
+  status: z.enum(['draft', 'published', 'archived']).optional(),
 });
 
 export const createChapterSchema = z.object({
@@ -71,11 +77,13 @@ export const createChapterSchema = z.object({
   content: z.string().optional(),
   orderIndex: z.number().int().min(0).optional(),
   estimatedMinutes: z.number().int().positive().optional(),
+  status: z.enum(['draft', 'published', 'archived']).optional(),
 });
 
 // ── Problem ───────────────────────────────────────────────────────────────────
 export const createProblemSchema = z.object({
   title: z.string().min(2).max(255),
+  slug: z.string().min(1).max(300).optional(),
   statement: z.string().min(10),
   difficulty: z.enum(['easy', 'medium', 'hard']),
   scope: z.enum(['institution', 'public']),
@@ -88,6 +96,14 @@ export const createProblemSchema = z.object({
   memoryLimitMb: z.number().int().min(16).max(1024).optional(),
   allowedLanguages: z.array(z.number().int()).optional(),
   chapterId: z.string().uuid().optional(),
+  testCases: z.array(z.object({
+    input: z.string(),
+    expectedOutput: z.string().min(1),
+    isHidden: z.boolean().optional(),
+    points: z.number().int().min(0).optional(),
+    orderIndex: z.number().int().min(0).optional(),
+    explanation: z.string().optional(),
+  })).optional(),
 });
 
 export const createTestCaseSchema = z.object({
@@ -118,6 +134,12 @@ export const createAssignmentSchema = z.object({
   totalMarks: z.number().int().positive().optional(),
   courseId: z.string().uuid().optional(),
   chapterId: z.string().uuid().optional(),
+  status: z.enum(['draft', 'published', 'archived']).optional(),
+  problemIds: z.array(z.object({
+    problemId: z.string().uuid(),
+    marks: z.number().int().positive().optional(),
+    orderIndex: z.number().int().min(0).optional(),
+  })).optional(),
 });
 
 export const addProblemToAssignmentSchema = z.object({
@@ -137,6 +159,16 @@ export const createQuizSchema = z.object({
   shuffleOptions: z.boolean().optional(),
   showAnswersAfter: z.boolean().optional(),
   chapterId: z.string().uuid().optional(),
+  status: z.enum(['draft', 'published', 'archived']).optional(),
+  questions: z.array(z.object({
+    questionText: z.string().min(1),
+    options: z.array(z.object({ id: z.string(), text: z.string() })).min(2).max(6),
+    correctOptions: z.array(z.string()).min(1),
+    points: z.number().int().positive().optional(),
+    orderIndex: z.number().int().min(0).optional(),
+    explanation: z.string().optional(),
+    imageUrl: z.string().url().optional(),
+  })).optional(),
 });
 
 export const addQuizQuestionSchema = z.object({
@@ -159,6 +191,7 @@ export const submitQuizSchema = z.object({
 // ── Blog ──────────────────────────────────────────────────────────────────────
 export const createBlogPostSchema = z.object({
   title: z.string().min(2).max(500),
+  slug: z.string().min(1).max(550).optional(),
   content: z.string().min(1),
   excerpt: z.string().optional(),
   coverImageUrl: z.string().url().optional(),
@@ -167,10 +200,13 @@ export const createBlogPostSchema = z.object({
   seoTitle: z.string().max(70).optional(),
   seoDescription: z.string().max(160).optional(),
   isFeatured: z.boolean().optional(),
+  status: z.enum(['draft', 'published', 'archived']).optional(),
+  readTimeMinutes: z.number().int().positive().optional(),
 });
 
 // ── Pagination ────────────────────────────────────────────────────────────────
 export const paginationSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
+  search: z.string().max(255).optional(),
 });

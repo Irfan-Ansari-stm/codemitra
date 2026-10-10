@@ -13,14 +13,17 @@ export default function SubmissionResult({
   isPolling,
 }: SubmissionResultProps) {
   const verdictConfig = VERDICT_CONFIG[submission.verdict];
-  const VerdictIcon = {
-    'Accepted': CheckCircle,
-    'Wrong Answer': XCircle,
-    'Compilation Error': AlertCircle,
-    'Runtime Error': AlertCircle,
-    'Time Limit Exceeded': Clock,
-    'Pending': Clock,
-  }[submission.verdict] || Clock;
+  const VerdictIcon = ({
+    accepted: CheckCircle,
+    wrong_answer: XCircle,
+    time_limit_exceeded: Clock,
+    memory_limit_exceeded: AlertCircle,
+    runtime_error: AlertCircle,
+    compile_error: AlertCircle,
+    presentation_error: AlertCircle,
+    internal_error: AlertCircle,
+    pending: Clock,
+  } as Record<SubmissionVerdict, typeof Clock>)[submission.verdict] || Clock;
 
   return (
     <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
@@ -50,7 +53,7 @@ export default function SubmissionResult({
             Time
           </p>
           <p className="text-lg font-semibold text-gray-900 dark:text-white">
-            {submission.executionTime ? `${submission.executionTime}ms` : '—'}
+            {submission.runtimeMs ? `${submission.runtimeMs}ms` : '—'}
           </p>
         </div>
         <div>
@@ -58,7 +61,7 @@ export default function SubmissionResult({
             Memory
           </p>
           <p className="text-lg font-semibold text-gray-900 dark:text-white">
-            {submission.memoryUsed ? `${submission.memoryUsed}KB` : '—'}
+            {submission.memoryKb ? `${submission.memoryKb}KB` : '—'}
           </p>
         </div>
       </div>
@@ -107,7 +110,7 @@ export default function SubmissionResult({
             Compilation Error
           </h4>
           <pre className="text-xs text-red-800 dark:text-red-300 whitespace-pre-wrap break-words overflow-hidden max-h-40">
-            {submission.compilationOutput}
+          {submission.compilationOutput || submission.stderrOutput}
           </pre>
         </div>
       )}

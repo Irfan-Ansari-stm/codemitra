@@ -54,20 +54,59 @@ export const assignmentService = {
     totalMarks?: number;
     courseId?: string;
     chapterId?: string;
+    status?: string;
   }) {
     const result = await pool.query(
       `INSERT INTO assignments
          (tenant_id, created_by, title, description, instructions, due_date,
-          late_submission_allowed, late_penalty_percent, total_marks, course_id, chapter_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+          late_submission_allowed, late_penalty_percent, total_marks, course_id, chapter_id, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [
         data.tenantId, data.createdBy, data.title,
         data.description || null, data.instructions || null,
         data.dueDate || null, data.lateSubmissionAllowed ?? false,
         data.latePenaltyPercent ?? 0, data.totalMarks ?? 100,
-        data.courseId || null, data.chapterId || null,
+        data.courseId || null, data.chapterId || null, data.status || 'draft',
       ]
     );
+    return result.rows[0];
+  },
+
+  async update(assignmentId: string, tenantId: string, data: Record<string, any>) {
+    const allowed = ['title', 'description', 'instructions', 'due_date', 'late_submission_allowed', 'late_penalty_percent', 'total_marks', 'status'];
+    const mapped = { ...data };
+    if ('dueDate' in mapped) mapped.due_date = mapped.dueDate;
+    if ('lateSubmissionAllowed' in mapped) mapped.late_submission_allowed = mapped.lateSubmissionAllowed;
+    if ('latePenaltyPercent' in mapped) mapped.late_penalty_percent = mapped.latePenaltyPercent;
+    if ('totalMarks' in mapped) mapped.total_marks = mapped.totalMarks;
+    const fields = Object.keys(mapped).filter((key) => allowed.includes(key));
+    if (!fields.length) throw new AppError(400, 'NO_FIELDS', 'No valid fields to update');
+    const set = fields.map((field, i) => `${field}=$${i + 3}`).join(', ');
+    const result = await pool.query(`UPDATE assignments SET ${set}, updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND NOT is_deleted RETURNING *`, [assignmentId, tenantId, ...fields.map((key) => mapped[key])]);
+    if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Assignment not found');
+    return result.rows[0];
+  },
+
+  async softDelete(assignmentId: string, tenantId: string) {
+    const result = await pool.query('UPDATE assignments SET is_deleted=TRUE, updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND NOT is_deleted RETURNING id', [assignmentId, tenantId]);
+    if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Assignment not found');
+  },
+
+  async listSubmissions(assignmentId: string, tenantId: string) {
+    const result = await pool.query(
+      `SELECT s.*, u.name AS student_name, u.email AS student_email
+       FROM assignment_submissions s JOIN users u ON u.id=s.student_id
+       WHERE s.assignment_id=$1 AND s.tenant_id=$2 ORDER BY s.submitted_at DESC NULLS LAST`, [assignmentId, tenantId]
+    );
+    return result.rows;
+  },
+
+  async gradeSubmission(submissionId: string, tenantId: string, gradedBy: string, totalScore: number, feedback?: string) {
+    const result = await pool.query(
+      `UPDATE assignment_submissions SET total_score=$1, feedback=$2, status='graded', graded_by=$3, graded_at=NOW(), updated_at=NOW()
+       WHERE id=$4 AND tenant_id=$5 RETURNING *`, [totalScore, feedback || null, gradedBy, submissionId, tenantId]
+    );
+    if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Assignment submission not found');
     return result.rows[0];
   },
 

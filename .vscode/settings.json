@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cd \"d:\\\\0\\. project\\\\1\\. projects\\\\1\\. code meetra🛠️yes\\\\project\\\\app\\\\codemitra-frontend\"; npm run lint; npm run type-check$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

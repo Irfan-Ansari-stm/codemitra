@@ -130,6 +130,7 @@ export interface TestCaseResult {
   memoryKb?: number;
   stdout?: string;
   stderr?: string;
+  error?: string;
   points?: number;
 }
 
@@ -142,6 +143,9 @@ export interface Submission {
   score: number;
   runtimeMs?: number;
   memoryKb?: number;
+  stderrOutput?: string;
+  compilationOutput?: string;
+  runtimeOutput?: string;
   testCaseResults: TestCaseResult[];
   createdAt: string;
   updatedAt: string;

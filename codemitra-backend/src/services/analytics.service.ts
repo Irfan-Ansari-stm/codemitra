@@ -22,7 +22,11 @@ export const analyticsService = {
        WHERE t.id = $1`,
       [tenantId]
     );
-    return result.rows[0];
+    const row = result.rows[0];
+    return { ...row, totalStudents: Number(row.total_students), active7d: Number(row.active_7d),
+      submissions7d: Number(row.submissions_7d), accepted7d: Number(row.accepted_7d),
+      publishedCourses: Number(row.published_courses), totalProblems: Number(row.total_problems),
+      activeAssignments: Number(row.active_assignments) };
   },
 
   async getSubmissionHeatmap(tenantId: string, days = 90) {
@@ -75,5 +79,71 @@ export const analyticsService = {
       analyticsService.getLeaderboard(tenantId, 10),
     ]);
     return { overview, heatmap, leaderboard };
+  },
+
+  async getCourseCompletion(tenantId: string, courseId: string) {
+    const result = await pool.query(
+      `SELECT c.id AS "courseId", c.title AS "courseTitle",
+              COUNT(DISTINCT u.id)::int AS "totalStudents",
+              COUNT(DISTINCT up.user_id) FILTER (WHERE up.is_completed)::int AS "completedStudents",
+              COALESCE(ROUND(AVG(up.completion_percent), 1), 0) AS "averageCompletionPercent"
+       FROM courses c
+       LEFT JOIN users u ON u.tenant_id=c.tenant_id AND u.role='institution_student' AND u.is_active AND NOT u.is_deleted
+       LEFT JOIN modules m ON m.course_id=c.id
+       LEFT JOIN chapters cch ON cch.module_id=m.id
+       LEFT JOIN user_progress up ON up.chapter_id=cch.id AND up.user_id=u.id
+       WHERE c.id=$1 AND c.tenant_id=$2 AND NOT c.is_deleted
+       GROUP BY c.id`, [courseId, tenantId]
+    );
+    if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Course not found');
+    return result.rows[0];
+  },
+
+  async getProblemStatistics(problemId: string, tenantId?: string) {
+    const result = await pool.query(
+      `SELECT p.id AS "problemId", p.title, p.difficulty,
+              p.total_submissions AS "totalSubmissions", p.accepted_submissions AS "acceptedSubmissions",
+              CASE WHEN p.total_submissions=0 THEN 0 ELSE ROUND(p.accepted_submissions::numeric/p.total_submissions*100,1) END AS "acceptanceRate",
+              COUNT(DISTINCT s.user_id)::int AS "uniqueSolvers"
+       FROM problems p LEFT JOIN submissions s ON s.problem_id=p.id AND s.verdict='accepted'
+       WHERE p.id=$1 AND NOT p.is_deleted AND ($2::uuid IS NULL OR p.tenant_id=$2 OR p.scope='public')
+       GROUP BY p.id`, [problemId, tenantId || null]
+    );
+    if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Problem not found');
+    return result.rows[0];
+  },
+
+  async getLanguageActivity(tenantId: string, days = 30) {
+    const result = await pool.query(
+      `SELECT language_id AS "languageId", COUNT(*)::int AS submissions,
+              COUNT(*) FILTER (WHERE verdict='accepted')::int AS accepted
+       FROM submissions WHERE tenant_id=$1 AND created_at >= NOW() - ($2 || ' days')::interval
+       GROUP BY language_id ORDER BY submissions DESC`, [tenantId, Math.min(days, 365)]
+    );
+    return result.rows;
+  },
+
+  async getDifficultyDistribution(tenantId: string) {
+    const result = await pool.query(
+      `SELECT p.difficulty, COUNT(DISTINCT p.id)::int AS problems,
+              COUNT(s.id)::int AS submissions,
+              COUNT(s.id) FILTER (WHERE s.verdict='accepted')::int AS accepted
+       FROM problems p LEFT JOIN submissions s ON s.problem_id=p.id
+       WHERE NOT p.is_deleted AND (p.tenant_id=$1 OR p.scope='public')
+       GROUP BY p.difficulty ORDER BY CASE p.difficulty WHEN 'easy' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END`, [tenantId]
+    );
+    return result.rows;
+  },
+
+  async getPlatformOverview() {
+    const result = await pool.query(
+      `SELECT (SELECT COUNT(*)::int FROM tenants WHERE NOT is_deleted) AS "totalTenants",
+              (SELECT COUNT(*)::int FROM users WHERE NOT is_deleted) AS "totalUsers",
+              (SELECT COUNT(*)::int FROM problems WHERE NOT is_deleted) AS "totalProblems",
+              (SELECT COUNT(*)::int FROM submissions) AS "totalSubmissions",
+              (SELECT COUNT(*)::int FROM submissions WHERE verdict='accepted') AS "acceptedSubmissions",
+              (SELECT COUNT(*)::int FROM courses WHERE NOT is_deleted) AS "totalCourses"`
+    );
+    return result.rows[0];
   },
 };

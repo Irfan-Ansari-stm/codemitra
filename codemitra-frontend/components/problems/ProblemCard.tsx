@@ -26,7 +26,7 @@ export default function ProblemCard({
             {problem.title}
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
-            {problem.description}
+            {problem.statement}
           </p>
         </div>
         {solved && (
@@ -44,27 +44,22 @@ export default function ProblemCard({
       <div className="flex flex-wrap items-center gap-3 mb-4">
         {/* Difficulty Badge */}
         <span
-          className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${diffConfig.bg} ${diffConfig.text}`}
+          className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${diffConfig.bg} ${diffConfig.color}`}
         >
           {problem.difficulty}
         </span>
 
         {/* Acceptance Rate */}
         <span className="text-xs text-gray-600 dark:text-gray-400">
-          {problem.acceptanceRate}% accepted
+          {problem.totalSubmissions ? Math.round((problem.acceptedSubmissions / problem.totalSubmissions) * 100) : 0}% accepted
         </span>
       </div>
 
       <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-800">
         <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
           <Code size={16} />
-          {problem.submissionCount} submissions
+          {problem.totalSubmissions} submissions
         </div>
-        {problem.totalTestCases && (
-          <div className="text-xs text-gray-600 dark:text-gray-400">
-            {problem.totalTestCases} test cases
-          </div>
-        )}
       </div>
     </div>
   );

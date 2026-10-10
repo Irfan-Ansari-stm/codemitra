@@ -2,6 +2,36 @@ import { pool } from '../db';
 import { AppError } from '../middleware/errorHandler';
 
 export const quizService = {
+  async update(id: string, tenantId: string, data: Record<string, any>) {
+    const aliases: Record<string, string> = {
+      timeLimitMinutes: 'time_limit_minutes', passingScore: 'passing_score',
+      maxAttempts: 'max_attempts', shuffleQuestions: 'shuffle_questions',
+      shuffleOptions: 'shuffle_options', showAnswersAfter: 'show_answers_after',
+      chapterId: 'chapter_id',
+    };
+    const mapped = { ...data };
+    for (const [from, to] of Object.entries(aliases)) if (from in mapped) mapped[to] = mapped[from];
+    const allowed = ['title', 'description', 'status', ...Object.values(aliases)];
+    const fields = Object.keys(mapped).filter((key) => allowed.includes(key));
+    if (!fields.length) throw new AppError(400, 'NO_FIELDS', 'No valid fields to update');
+    const sets = fields.map((key, index) => `${key}=$${index + 3}`).join(', ');
+    const values = fields.map((key) => mapped[key]);
+    const result = await pool.query(
+      `UPDATE quizzes SET ${sets}, updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND NOT is_deleted RETURNING *`,
+      [id, tenantId, ...values]
+    );
+    if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Quiz not found');
+    return result.rows[0];
+  },
+
+  async softDelete(id: string, tenantId: string) {
+    const result = await pool.query(
+      'UPDATE quizzes SET is_deleted=TRUE, updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND NOT is_deleted RETURNING id',
+      [id, tenantId]
+    );
+    if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Quiz not found');
+  },
+
   async list(tenantId: string) {
     const result = await pool.query(
       `SELECT q.id, q.title, q.description, q.status, q.time_limit_minutes,
@@ -16,7 +46,7 @@ export const quizService = {
     return result.rows;
   },
 
-  async getById(id: string, tenantId: string) {
+  async getById(id: string, tenantId: string, includeAnswers = false) {
     const result = await pool.query(
       'SELECT * FROM quizzes WHERE id = $1 AND tenant_id = $2 AND NOT is_deleted LIMIT 1',
       [id, tenantId]
@@ -24,7 +54,7 @@ export const quizService = {
     if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Quiz not found');
 
     const questions = await pool.query(
-      `SELECT id, question_text, options, correct_options, points, order_index, image_url
+      `SELECT id, question_text, options, ${includeAnswers ? 'correct_options,' : ''} points, order_index, image_url
        FROM quiz_questions WHERE quiz_id = $1 ORDER BY order_index`,
       [id]
     );
@@ -43,19 +73,20 @@ export const quizService = {
     shuffleOptions?: boolean;
     showAnswersAfter?: boolean;
     chapterId?: string;
+    status?: string;
   }) {
     const result = await pool.query(
       `INSERT INTO quizzes
          (tenant_id, created_by, title, description, time_limit_minutes,
           passing_score, max_attempts, shuffle_questions, shuffle_options,
-          show_answers_after, chapter_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+          show_answers_after, chapter_id, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [
         data.tenantId, data.createdBy, data.title, data.description || null,
         data.timeLimitMinutes ?? 30, data.passingScore ?? 60,
         data.maxAttempts ?? 1, data.shuffleQuestions !== false,
         data.shuffleOptions !== false, data.showAnswersAfter ?? false,
-        data.chapterId || null,
+        data.chapterId || null, data.status || 'draft',
       ]
     );
     return result.rows[0];

@@ -24,6 +24,19 @@ problemRouter.get('/', optionalAuth, validate(paginationSchema, 'query'), async 
   }
 });
 
+// Keep named paths before /:id so Express does not treat their first segment as a UUID.
+problemRouter.get('/:id/test-cases', requireAuth, isInstitutionAdmin, async (req, res, next) => {
+  try {
+    const testCases = await problemService.getTestCases(req.params.id, true);
+    res.json({ success: true, data: testCases });
+  } catch (err) { next(err); }
+});
+
+problemRouter.get('/:id/stats', requireAuth, isInstitutionAdmin, async (req, res, next) => {
+  try { res.json({ success: true, data: await problemService.getStats(req.params.id) }); }
+  catch (err) { next(err); }
+});
+
 // GET /api/v1/problems/:id
 problemRouter.get('/:id', optionalAuth, async (req, res, next) => {
   try {
@@ -47,6 +60,9 @@ problemRouter.post(
         createdBy: req.user!.id,
         ...req.body,
       });
+      for (const testCase of req.body.testCases || []) {
+        await problemService.addTestCase({ problemId: problem.id, ...testCase });
+      }
       res.status(201).json({ success: true, data: problem });
     } catch (err) {
       next(err);
@@ -54,20 +70,22 @@ problemRouter.post(
   }
 );
 
-// GET /api/v1/problems/:id/test-cases — all test cases (admin only)
-problemRouter.get(
-  '/:id/test-cases',
-  requireAuth,
-  isInstitutionAdmin,
-  async (req, res, next) => {
-    try {
-      const testCases = await problemService.getTestCases(req.params.id, true);
-      res.json({ success: true, data: testCases });
-    } catch (err) {
-      next(err);
-    }
-  }
-);
+problemRouter.patch('/:id', requireAuth, isInstitutionAdmin, async (req, res, next) => {
+  try { res.json({ success: true, data: await problemService.update(req.params.id, req.body || {}) }); }
+  catch (err) { next(err); }
+});
+problemRouter.delete('/:id', requireAuth, isInstitutionAdmin, async (req, res, next) => {
+  try { await problemService.softDelete(req.params.id); res.json({ success: true, data: { message: 'Problem deleted' } }); }
+  catch (err) { next(err); }
+});
+problemRouter.patch('/test-cases/:testCaseId', requireAuth, isInstitutionAdmin, async (req, res, next) => {
+  try { res.json({ success: true, data: await problemService.updateTestCase(req.params.testCaseId, req.body || {}) }); }
+  catch (err) { next(err); }
+});
+problemRouter.delete('/test-cases/:testCaseId', requireAuth, isInstitutionAdmin, async (req, res, next) => {
+  try { await problemService.deleteTestCase(req.params.testCaseId); res.json({ success: true, data: { message: 'Test case deleted' } }); }
+  catch (err) { next(err); }
+});
 
 // POST /api/v1/problems/:id/test-cases
 problemRouter.post(

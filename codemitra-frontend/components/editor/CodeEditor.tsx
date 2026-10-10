@@ -15,6 +15,7 @@ const MonacoEditor = dynamic(
 interface CodeEditorProps {
   problemId: string;
   onSubmit?: (code: string, languageId: number) => void;
+  onRun?: (code: string, languageId: number) => void;
   isSubmitting?: boolean;
 }
 
@@ -29,15 +30,15 @@ function EditorSkeleton() {
 export default function CodeEditor({
   problemId,
   onSubmit,
+  onRun,
   isSubmitting,
 }: CodeEditorProps) {
   const {
     languageId,
-    code,
     theme,
     fontSize,
     wordWrap,
-    setLanguageId,
+    setLanguage,
     setCode,
     setTheme,
     setFontSize,
@@ -45,7 +46,11 @@ export default function CodeEditor({
     getCode,
   } = useEditorStore();
 
-  const currentLanguage = LANGUAGES.find((l) => l.id === languageId);
+  const languages = Object.entries(LANGUAGES).map(([id, language]) => ({
+    id: Number(id),
+    ...language,
+  }));
+  const currentLanguage = LANGUAGES[languageId];
 
   const handleEditorChange = (value: string | undefined) => {
     if (value) {
@@ -54,7 +59,7 @@ export default function CodeEditor({
   };
 
   const handleLanguageChange = (newLanguageId: number) => {
-    setLanguageId(newLanguageId);
+    setLanguage(newLanguageId);
   };
 
   return (
@@ -72,7 +77,7 @@ export default function CodeEditor({
               onChange={(e) => handleLanguageChange(Number(e.target.value))}
               className="appearance-none pl-3 pr-8 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
             >
-              {LANGUAGES.map((lang) => (
+              {languages.map((lang) => (
                 <option key={lang.id} value={lang.id}>
                   {lang.name}
                 </option>
@@ -114,13 +119,23 @@ export default function CodeEditor({
 
         {/* Theme Toggle */}
         <button
-          onClick={() => setTheme(theme === 'vs-dark' ? 'vs' : 'vs-dark')}
+          onClick={() => setTheme(theme === 'vs-dark' ? 'light' : 'vs-dark')}
           className="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg transition-colors"
         >
           {theme === 'vs-dark' ? '☀️ Light' : '🌙 Dark'}
         </button>
 
         {/* Submit Button */}
+        {onRun && (
+          <button
+            type="button"
+            onClick={() => onRun(getCode(problemId, languageId), languageId)}
+            disabled={isSubmitting}
+            className="ml-auto rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-700"
+          >
+            Run samples
+          </button>
+        )}
         {onSubmit && (
           <button
             onClick={() => {
@@ -128,7 +143,7 @@ export default function CodeEditor({
               onSubmit(currentCode, languageId);
             }}
             disabled={isSubmitting}
-            className="ml-auto px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors text-sm font-medium"
+            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors text-sm font-medium"
           >
             {isSubmitting ? 'Submitting...' : 'Submit Code'}
           </button>

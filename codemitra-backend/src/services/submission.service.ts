@@ -93,11 +93,28 @@ export const submissionService = {
       memory_limit: (problem.memory_limit_mb * 1024).toString(),
     }));
 
-    const judge0Response = await axios.post(
-      `${JUDGE0_URL}/submissions/batch?base64_encoded=true`,
-      { submissions: judge0Submissions },
-      { headers: judge0Headers(), timeout: 10_000 }
-    );
+    let judge0Response;
+    try {
+      judge0Response = await axios.post(
+        `${JUDGE0_URL}/submissions/batch?base64_encoded=true`,
+        { submissions: judge0Submissions },
+        { headers: judge0Headers(), timeout: 10_000 }
+      );
+    } catch {
+      if (submissionId) {
+        await pool.query(
+          `UPDATE submissions
+           SET verdict = 'internal_error', stderr_output = $1, updated_at = NOW()
+           WHERE id = $2 AND verdict = 'pending'`,
+          ['Judge0 is unavailable; execution was not started.', submissionId]
+        );
+      }
+      throw new AppError(
+        503,
+        'JUDGE0_UNAVAILABLE',
+        'Code execution service is unavailable. Start Judge0 and try again.'
+      );
+    }
 
     const tokens: string[] = judge0Response.data.map((s: any) => s.token);
 
@@ -164,7 +181,18 @@ export const submissionService = {
       [sub.problem_id]
     );
     const testCases = tcResult.rows;
-    const results = await submissionService.pollJudge0(tokens, testCases);
+    let results: any[];
+    try {
+      results = await submissionService.pollJudge0(tokens, testCases);
+    } catch {
+      await pool.query(
+        `UPDATE submissions
+         SET verdict = 'internal_error', stderr_output = $1, updated_at = NOW()
+         WHERE id = $2 AND verdict = 'pending'`,
+        ['Judge0 could not return an execution result.', submissionId]
+      );
+      return;
+    }
 
     const allPassed = results.every((r) => r.passed);
     const finalVerdict = allPassed

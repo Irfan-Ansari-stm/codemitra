@@ -5,14 +5,23 @@ import { AppError } from '../middleware/errorHandler';
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12');
 
 export const userService = {
-  async list(tenantId: string, page = 1, limit = 20, role?: string) {
+  async list(tenantId: string | undefined, page = 1, limit = 20, role?: string, search?: string) {
     const offset = (page - 1) * limit;
-    const conditions: string[] = ['u.tenant_id = $1', 'u.is_deleted = FALSE'];
-    const params: any[] = [tenantId];
+    const conditions: string[] = ['u.is_deleted = FALSE'];
+    const params: any[] = [];
+
+    if (tenantId) {
+      params.push(tenantId);
+      conditions.push(`u.tenant_id = $${params.length}`);
+    }
 
     if (role) {
       params.push(role);
       conditions.push(`u.role = $${params.length}`);
+    }
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`(u.name ILIKE $${params.length} OR u.email ILIKE $${params.length})`);
     }
 
     const where = conditions.join(' AND ');
@@ -30,12 +39,20 @@ export const userService = {
     return { data: result.rows, total: parseInt(count.rows[0].count) };
   },
 
-  async getById(id: string) {
+  async getById(id: string, tenantId?: string | null) {
     const result = await pool.query(
-      `SELECT id, name, email, role, tenant_id, is_active, is_email_verified,
-              avatar_url, phone, bio, metadata, last_login_at, created_at
-       FROM users WHERE id = $1 AND is_deleted = FALSE LIMIT 1`,
-      [id]
+      `SELECT u.id, u.name, u.email, u.role, u.tenant_id, u.is_active, u.is_email_verified,
+              u.avatar_url, u.phone, u.bio, u.metadata, u.last_login_at, u.created_at,
+              COALESCE(us.total_problems_solved, 0)::int AS total_problems_solved,
+              COALESCE(us.easy_solved, 0)::int AS easy_solved,
+              COALESCE(us.medium_solved, 0)::int AS medium_solved,
+              COALESCE(us.hard_solved, 0)::int AS hard_solved,
+              COALESCE(us.total_submissions, 0)::int AS total_submissions,
+              COALESCE(us.total_score, 0) AS total_score
+       FROM users u LEFT JOIN user_stats us ON us.user_id = u.id
+       WHERE u.id = $1 AND u.is_deleted = FALSE
+         AND ($2::uuid IS NULL OR u.tenant_id = $2) LIMIT 1`,
+      [id, tenantId || null]
     );
     if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'User not found');
     return result.rows[0];
@@ -66,12 +83,15 @@ export const userService = {
   },
 
   async update(id: string, data: Record<string, any>) {
+    const mapped = { ...data };
+    if ('avatarUrl' in mapped) mapped.avatar_url = mapped.avatarUrl;
+    if ('isActive' in mapped) mapped.is_active = mapped.isActive;
     const allowed = ['name', 'phone', 'bio', 'avatar_url', 'metadata', 'is_active'];
-    const fields = Object.keys(data).filter((k) => allowed.includes(k));
+    const fields = Object.keys(mapped).filter((k) => allowed.includes(k));
     if (fields.length === 0) throw new AppError(400, 'NO_FIELDS', 'No valid fields to update');
 
     const sets = fields.map((f, i) => `${f} = $${i + 2}`).join(', ');
-    const values = fields.map((f) => (f === 'metadata' ? JSON.stringify(data[f]) : data[f]));
+    const values = fields.map((f) => (f === 'metadata' ? JSON.stringify(mapped[f]) : mapped[f]));
 
     const result = await pool.query(
       `UPDATE users SET ${sets}, updated_at = NOW()
@@ -80,6 +100,16 @@ export const userService = {
     );
     if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'User not found');
     return result.rows[0];
+  },
+
+  async resetPassword(id: string, tenantId: string, newPassword: string) {
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    const result = await pool.query(
+      `UPDATE users SET password_hash = $1, login_attempt_count = 0, locked_until = NULL, updated_at = NOW()
+       WHERE id = $2 AND tenant_id = $3 AND role = 'institution_student' AND NOT is_deleted
+       RETURNING id`, [passwordHash, id, tenantId]
+    );
+    if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Student not found');
   },
 
   async softDelete(id: string) {
@@ -95,6 +125,10 @@ export const userService = {
       'SELECT * FROM user_stats WHERE user_id = $1 LIMIT 1',
       [userId]
     );
-    return { ...user, stats: stats.rows[0] || null };
+    return {
+      ...user,
+      totalProblemsSolved: user.total_problems_solved,
+      stats: stats.rows[0] || null,
+    };
   },
 };

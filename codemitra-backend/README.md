@@ -18,6 +18,8 @@ npm run dev
 API is live at `http://localhost:5000`
 Health check: `GET http://localhost:5000/health`
 
+Code execution endpoints (`POST /api/v1/submissions` and `/run`) require a reachable Judge0 service at `JUDGE0_URL` (default `http://localhost:2358`). If Judge0 is unavailable, the API returns `503 JUDGE0_UNAVAILABLE`; a submitted row is marked `internal_error` instead of being left pending.
+
 ---
 
 ## Project Structure

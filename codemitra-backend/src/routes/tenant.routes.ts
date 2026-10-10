@@ -9,6 +9,27 @@ import { writeAuditLog } from '../utils/audit';
 export const tenantRouter = Router();
 tenantRouter.use(requireAuth, isSuperAdmin);
 
+tenantRouter.get('/slug/:slug', async (req, res, next) => {
+  try {
+    const tenant = await tenantService.getBySlug(req.params.slug);
+    res.json({ success: true, data: tenant });
+  } catch (err) { next(err); }
+});
+
+tenantRouter.get('/:id/quota', async (req, res, next) => {
+  try {
+    const tenant = await tenantService.getById(req.params.id);
+    const result = await import('../db').then(({ pool }) => pool.query(
+      `SELECT COUNT(*)::int AS total_students,
+              COUNT(*) FILTER (WHERE is_active AND NOT is_deleted)::int AS active_students
+       FROM users WHERE tenant_id = $1 AND role = 'institution_student'`, [tenant.id]
+    ));
+    const active = result.rows[0].active_students;
+    res.json({ success: true, data: { tenantId: tenant.id, totalStudents: result.rows[0].total_students,
+      activeStudents: active, maxStudents: tenant.max_students, availableSlots: Math.max(0, tenant.max_students - active) } });
+  } catch (err) { next(err); }
+});
+
 // GET /api/v1/tenants
 tenantRouter.get('/', validate(paginationSchema, 'query'), async (req, res, next) => {
   try {
@@ -24,7 +45,7 @@ tenantRouter.get('/', validate(paginationSchema, 'query'), async (req, res, next
 tenantRouter.get('/:id', async (req, res, next) => {
   try {
     const tenant = await tenantService.getById(req.params.id);
-    res.json({ success: true, data: tenant });
+    res.json({ success: true, data: { id: tenant.id, name: tenant.name, slug: tenant.slug, plan: tenant.plan, maxStudents: tenant.max_students } });
   } catch (err) {
     next(err);
   }

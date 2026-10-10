@@ -51,12 +51,40 @@ assignmentRouter.post(
         createdBy: req.user!.id,
         ...req.body,
       });
+      for (const entry of req.body.problemIds || []) {
+        await assignmentService.addProblem(assignment.id, entry.problemId, entry.marks ?? 10, entry.orderIndex ?? 0);
+      }
       res.status(201).json({ success: true, data: assignment });
     } catch (err) {
       next(err);
     }
   }
 );
+
+assignmentRouter.patch('/:id', isInstitutionAdmin, async (req, res, next) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    if (!tenantId) throw new AppError(400, 'TENANT_REQUIRED', 'Tenant context required');
+    res.json({ success: true, data: await assignmentService.update(req.params.id, tenantId, req.body || {}) });
+  } catch (err) { next(err); }
+});
+
+assignmentRouter.get('/:id/submissions', isInstitutionAdmin, async (req, res, next) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    if (!tenantId) throw new AppError(400, 'TENANT_REQUIRED', 'Tenant context required');
+    res.json({ success: true, data: await assignmentService.listSubmissions(req.params.id, tenantId) });
+  } catch (err) { next(err); }
+});
+
+assignmentRouter.delete('/:id', isInstitutionAdmin, async (req, res, next) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    if (!tenantId) throw new AppError(400, 'TENANT_REQUIRED', 'Tenant context required');
+    await assignmentService.softDelete(req.params.id, tenantId);
+    res.json({ success: true, data: { message: 'Assignment deleted' } });
+  } catch (err) { next(err); }
+});
 
 // POST /api/v1/assignments/:id/problems — add a problem to an assignment
 assignmentRouter.post(
@@ -77,6 +105,18 @@ assignmentRouter.post(
     }
   }
 );
+
+export const assignmentCompatRouter = Router();
+assignmentCompatRouter.patch('/assignment-submissions/:submissionId/grade', requireAuth, isInstitutionAdmin, async (req, res, next) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const score = Number(req.body?.totalScore);
+    if (!tenantId) throw new AppError(400, 'TENANT_REQUIRED', 'Tenant context required');
+    if (!Number.isFinite(score) || score < 0) throw new AppError(400, 'VALIDATION_ERROR', 'totalScore must be a non-negative number');
+    const data = await assignmentService.gradeSubmission(req.params.submissionId, tenantId, req.user!.id, score, req.body?.feedback);
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+});
 
 // GET /api/v1/assignments/:id/my-submission — student's own submission record
 assignmentRouter.get('/:id/my-submission', isAuthenticated, async (req, res, next) => {

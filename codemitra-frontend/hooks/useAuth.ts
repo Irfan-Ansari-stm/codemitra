@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { authApi, setAccessToken } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
-import { getErrorMessage } from '@/lib/api';
 
 export function useLogin() {
   const router = useRouter();
@@ -23,9 +22,9 @@ export function useLogin() {
       if (role === 'super_admin') {
         router.push('/super-admin/dashboard');
       } else if (role === 'institution_admin') {
-        router.push('/dashboard');
+        router.push('/institution/dashboard');
       } else {
-        router.push('/dashboard');
+        router.push('/institution/dashboard');
       }
     },
     onError: (error) => {

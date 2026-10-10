@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosError } from 'axios';
 import { ApiResponse } from '@/types';
+import { useAuthStore } from '@/store/authStore';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
 
@@ -22,6 +23,25 @@ export const api: AxiosInstance = axios.create({
   },
 });
 
+function camelCaseKeys(value: any): any {
+  if (Array.isArray(value)) return value.map(camelCaseKeys);
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nested]) => [
+        key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()),
+        camelCaseKeys(nested),
+      ])
+    );
+  }
+  return value;
+}
+
+// PostgreSQL returns snake_case column names; frontend models use camelCase.
+api.interceptors.response.use((response) => {
+  response.data = camelCaseKeys(response.data);
+  return response;
+});
+
 // Request interceptor: attach access token
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (accessToken) {
@@ -31,47 +51,48 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 });
 
 // Response interceptor: auto-refresh on 401
-let isRefreshing = false;
-let refreshQueue: Array<(token: string) => void> = [];
+let refreshPromise: Promise<string> | null = null;
 
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const original = error.config as any;
 
-    if (error.response?.status === 401 && !original._retry) {
-      if (isRefreshing) {
-        return new Promise((resolve) => {
-          refreshQueue.push((token) => {
-            original.headers.Authorization = `Bearer ${token}`;
-            resolve(api(original));
+    const requestUrl = String(original?.url || '');
+    const isAuthRequest = /\/auth\/(login|refresh)$/.test(requestUrl);
+    if (error.response?.status === 401 && !original?._retry && !isAuthRequest) {
+      original._retry = true;
+
+      if (!refreshPromise) {
+        refreshPromise = axios
+          .post(`${BASE_URL}/auth/refresh`, {}, { withCredentials: true })
+          .then(({ data }) => {
+            const token = data.data.accessToken as string;
+            setAccessToken(token);
+            return token;
+          })
+          .catch((refreshError) => {
+            setAccessToken(null);
+            if (typeof window !== 'undefined') {
+              useAuthStore.getState().clear();
+              const path = window.location.pathname;
+              const isPublicPage = path === '/' || path === '/problems' || path.startsWith('/blog') ||
+                path === '/login' || path === '/register' || path === '/forgot-password';
+              if (!isPublicPage) window.location.href = '/login';
+            }
+            throw refreshError;
+          })
+          .finally(() => {
+            refreshPromise = null;
           });
-        });
       }
 
-      original._retry = true;
-      isRefreshing = true;
-
       try {
-        const { data } = await axios.post(
-          `${BASE_URL}/auth/refresh`,
-          {},
-          { withCredentials: true }
-        );
-        const newToken = data.data.accessToken;
-        setAccessToken(newToken);
-        refreshQueue.forEach((cb) => cb(newToken));
-        refreshQueue = [];
+        const newToken = await refreshPromise;
         original.headers.Authorization = `Bearer ${newToken}`;
         return api(original);
       } catch {
-        accessToken = null;
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
-        }
         return Promise.reject(error);
-      } finally {
-        isRefreshing = false;
       }
     }
 
@@ -121,6 +142,8 @@ export const tenantApi = {
 
   quota: (id: string) =>
     api.get(`/tenants/${id}/quota`),
+
+  delete: (id: string) => api.delete(`/tenants/${id}`),
 };
 
 // ── USER API ──
@@ -221,6 +244,9 @@ export const problemApi = {
 
   getStats: (problemId: string) =>
     api.get(`/problems/${problemId}/stats`),
+
+  updateTestCase: (testCaseId: string, data: any) => api.patch(`/test-cases/${testCaseId}`, data),
+  deleteTestCase: (testCaseId: string) => api.delete(`/test-cases/${testCaseId}`),
 };
 
 // ── SUBMISSION API ──
@@ -287,6 +313,8 @@ export const quizApi = {
 
   submitAnswers: (attemptId: string, data: any) =>
     api.post(`/quiz-attempts/${attemptId}/submit`, data),
+
+  delete: (id: string) => api.delete(`/quizzes/${id}`),
 };
 
 // ── ANALYTICS API ──
@@ -341,6 +369,7 @@ export const blogApi = {
 
   categories: () =>
     api.get<ApiResponse<any[]>>('/blog/categories'),
+
 };
 
 // ── NOTIFICATION API ──
@@ -353,6 +382,11 @@ export const notificationApi = {
 
   delete: (id: string) =>
     api.delete(`/notifications/${id}`),
+};
+
+export const announcementApi = {
+  create: (data: { title: string; content: string; isPinned?: boolean }) =>
+    api.post<ApiResponse<any>>('/announcements', data),
 };
 
 // Error handling utility

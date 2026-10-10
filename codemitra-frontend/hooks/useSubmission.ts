@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { submissionApi } from '@/lib/api';
 import { useEditorStore } from '@/store/editorStore';
 
@@ -11,7 +11,6 @@ interface UseSubmitOptions {
 export function useSubmit(problemId: string, options?: UseSubmitOptions) {
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(false);
-  const qc = useQueryClient();
 
   // Mutation: create submission
   const submitMutation = useMutation({
@@ -36,11 +35,12 @@ export function useSubmit(problemId: string, options?: UseSubmitOptions) {
   });
 
   // Poll submission until non-pending
-  const { data: submissionData, isLoading: isLoadingSubmission } = useQuery({
+  const { data: submissionData } = useQuery({
     queryKey: ['submission', submissionId],
     queryFn: () => submissionApi.get(submissionId!).then((r) => r.data.data),
     enabled: !!submissionId && isPolling,
-    refetchInterval: (data) => {
+    refetchInterval: (query) => {
+      const data = query.state.data;
       if (data?.verdict && data.verdict !== 'pending') {
         setIsPolling(false);
         options?.onSuccess?.();
@@ -88,7 +88,7 @@ export function useSubmissionDetail(submissionId: string | null) {
 }
 
 export function useAutoSaveCode(problemId: string, languageId: number) {
-  const { code, autoSave } = useEditorStore();
+  const { autoSave } = useEditorStore();
   const currentCode = useEditorStore((state) => state.getCode(problemId, languageId));
 
   useEffect(() => {

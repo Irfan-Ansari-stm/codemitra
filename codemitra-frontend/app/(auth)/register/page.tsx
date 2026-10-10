@@ -5,10 +5,11 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Mail, Lock, User, AlertCircle } from 'lucide-react';
 import { useRegister } from '@/hooks/useAuth';
+import { getErrorMessage } from '@/lib/api';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { register, isLoading, error } = useRegister();
+  const { mutateAsync: register, isPending: isLoading, error } = useRegister();
   
   const [formData, setFormData] = useState({
     firstName: '',
@@ -37,18 +38,17 @@ export default function RegisterPage() {
     }
 
     try {
-      await register(
-        formData.firstName,
-        formData.lastName,
-        formData.email,
-        formData.password
-      );
+      await register({
+        name: `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim(),
+        email: formData.email.trim(),
+        password: formData.password,
+      });
       setSuccess(true);
       setTimeout(() => {
         router.push('/login');
       }, 2000);
     } catch (err) {
-      setLocalError('Registration failed. Please try again.');
+      setLocalError(getErrorMessage(err));
     }
   };
 
@@ -87,7 +87,7 @@ export default function RegisterPage() {
             <div className="flex items-center gap-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
               <AlertCircle size={20} className="text-red-600" />
               <p className="text-sm text-red-600 dark:text-red-400">
-                {error || localError}
+                {localError || getErrorMessage(error)}
               </p>
             </div>
           )}

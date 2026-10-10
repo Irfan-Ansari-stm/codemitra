@@ -1,111 +1,14 @@
 'use client';
 
-import { LeaderboardEntry } from '@/types';
-import { Medal, Trophy } from 'lucide-react';
+import type { LeaderboardEntry } from '@/types';
+import { Trophy } from 'lucide-react';
 
-interface LeaderboardProps {
-  entries: LeaderboardEntry[];
-  isLoading?: boolean;
-}
+export default function Leaderboard({ entries, isLoading }: { entries: LeaderboardEntry[]; isLoading?: boolean }) {
+  if (isLoading) return <div className="space-y-2" aria-label="Loading leaderboard">{[1, 2, 3, 4].map((row) => <div key={row} className="h-12 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />)}</div>;
+  if (!entries?.length) return <div className="grid min-h-44 place-items-center rounded-lg border border-dashed border-slate-200 px-4 text-center dark:border-slate-800"><div><Trophy size={20} className="mx-auto text-slate-400" /><p className="mt-2 text-xs text-slate-500">No learner scores are available yet.</p></div></div>;
 
-export default function Leaderboard({ entries, isLoading }: LeaderboardProps) {
-  if (isLoading) {
-    return (
-      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-6">
-        <div className="animate-pulse space-y-3">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-12 bg-gray-200 dark:bg-gray-800 rounded" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (!entries || entries.length === 0) {
-    return (
-      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-6 text-center">
-        <Trophy size={32} className="mx-auto text-gray-400 mb-3" />
-        <p className="text-gray-600 dark:text-gray-400">
-          No leaderboard data available
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-      <table className="w-full">
-        <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-800">
-          <tr>
-            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-              Rank
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-              User
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-              Points
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-              Submissions
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-          {entries.map((entry, idx) => {
-            const rank = idx + 1;
-            let medalColor = '';
-            let medal = null;
-
-            if (rank === 1) {
-              medalColor = 'text-yellow-500';
-              medal = '🥇';
-            } else if (rank === 2) {
-              medalColor = 'text-gray-400';
-              medal = '🥈';
-            } else if (rank === 3) {
-              medalColor = 'text-orange-600';
-              medal = '🥉';
-            }
-
-            return (
-              <tr
-                key={entry.userId}
-                className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-              >
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center gap-2">
-                    {medal && <span>{medal}</span>}
-                    <span className="font-bold text-gray-900 dark:text-white">
-                      #{rank}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {entry.userName}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {entry.userEmail}
-                    </p>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="font-bold text-lg text-primary">
-                    {entry.points}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
-                    {entry.submissionCount}
-                  </span>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
+  return <div className="overflow-x-auto"><table className="w-full min-w-[390px] text-left text-xs">
+    <thead><tr className="border-b border-slate-200 text-[10px] uppercase tracking-wide text-slate-500 dark:border-slate-800"><th className="py-2 pr-3 font-medium">Rank</th><th className="py-2 pr-3 font-medium">Learner</th><th className="py-2 pr-3 text-right font-medium">Solved</th><th className="py-2 text-right font-medium">Score</th></tr></thead>
+    <tbody>{entries.slice(0, 8).map((entry, index) => <tr key={entry.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800/70"><td className="py-3 pr-3 font-semibold tabular-nums text-slate-500">{entry.rank ?? index + 1}</td><td className="py-3 pr-3"><span className="flex items-center gap-2"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{entry.name?.slice(0, 1).toUpperCase()}</span><span className="max-w-32 truncate font-medium text-slate-800 dark:text-slate-200">{entry.name}</span></span></td><td className="py-3 pr-3 text-right tabular-nums text-slate-600 dark:text-slate-400">{entry.totalProblemsSolved}</td><td className="py-3 text-right font-semibold tabular-nums text-slate-900 dark:text-slate-100">{entry.totalScore}</td></tr>)}</tbody>
+  </table></div>;
 }

@@ -1,6 +1,6 @@
 import { pool } from '../db';
 import { AppError } from '../middleware/errorHandler';
-import { toUniqueSlug } from '../utils/slug';
+import { toSlug, toUniqueSlug } from '../utils/slug';
 
 export const problemService = {
   async list(params: {
@@ -69,6 +69,7 @@ export const problemService = {
   async create(data: {
     tenantId?: string | null;
     chapterId?: string | null;
+    slug?: string;
     createdBy: string;
     title: string;
     statement: string;
@@ -83,7 +84,7 @@ export const problemService = {
     memoryLimitMb?: number;
     allowedLanguages?: number[];
   }) {
-    const slug = toUniqueSlug(data.title);
+    const slug = data.slug ? toSlug(data.slug) : toUniqueSlug(data.title);
     const result = await pool.query(
       `INSERT INTO problems
          (tenant_id, chapter_id, created_by, title, slug, statement, difficulty, scope,
@@ -121,6 +122,54 @@ export const problemService = {
         data.orderIndex ?? 0, data.explanation || null,
       ]
     );
+    return result.rows[0];
+  },
+
+  async update(problemId: string, data: Record<string, any>) {
+    const mapped = { ...data };
+    if ('timeLimitMs' in mapped) mapped.time_limit_ms = mapped.timeLimitMs;
+    if ('memoryLimitMb' in mapped) mapped.memory_limit_mb = mapped.memoryLimitMb;
+    if ('constraintsText' in mapped) mapped.constraints_text = mapped.constraintsText;
+    const allowed = ['title', 'statement', 'difficulty', 'scope', 'input_format', 'output_format', 'constraints_text', 'sample_explanation', 'tags', 'time_limit_ms', 'memory_limit_mb', 'allowed_languages'];
+    const fields = Object.keys(mapped).filter((key) => allowed.includes(key));
+    if (!fields.length) throw new AppError(400, 'NO_FIELDS', 'No valid fields to update');
+    const assignments = fields.map((field, i) => `${field}=$${i + 2}`).join(', ');
+    const values = fields.map((field) => ['tags', 'allowed_languages'].includes(field) ? `{${mapped[field].join(',')}}` : mapped[field]);
+    const result = await pool.query(`UPDATE problems SET ${assignments}, updated_at=NOW() WHERE id=$1 AND NOT is_deleted RETURNING *`, [problemId, ...values]);
+    if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Problem not found');
+    return result.rows[0];
+  },
+
+  async softDelete(problemId: string) {
+    const result = await pool.query('UPDATE problems SET is_deleted=TRUE, updated_at=NOW() WHERE id=$1 AND NOT is_deleted RETURNING id', [problemId]);
+    if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Problem not found');
+  },
+
+  async updateTestCase(id: string, data: Record<string, any>) {
+    const mapped = { ...data };
+    if ('isHidden' in mapped) mapped.is_hidden = mapped.isHidden;
+    if ('orderIndex' in mapped) mapped.order_index = mapped.orderIndex;
+    const allowed = ['input', 'expected_output', 'is_hidden', 'points', 'order_index', 'explanation'];
+    const fields = Object.keys(mapped).filter((key) => allowed.includes(key));
+    if (!fields.length) throw new AppError(400, 'NO_FIELDS', 'No valid fields to update');
+    const assignments = fields.map((field, i) => `${field}=$${i + 2}`).join(', ');
+    const result = await pool.query(`UPDATE test_cases SET ${assignments}, updated_at=NOW() WHERE id=$1 RETURNING *`, [id, ...fields.map((field) => mapped[field])]);
+    if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Test case not found');
+    return result.rows[0];
+  },
+
+  async deleteTestCase(id: string) {
+    await pool.query('DELETE FROM test_cases WHERE id=$1', [id]);
+  },
+
+  async getStats(problemId: string) {
+    const result = await pool.query(
+      `SELECT p.id, p.total_submissions AS totalSubmissions, p.accepted_submissions AS acceptedSubmissions,
+              CASE WHEN p.total_submissions=0 THEN 0 ELSE ROUND(p.accepted_submissions::numeric / p.total_submissions * 100, 1) END AS acceptanceRate,
+              p.difficulty, p.scope
+       FROM problems p WHERE p.id=$1 AND NOT p.is_deleted`, [problemId]
+    );
+    if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Problem not found');
     return result.rows[0];
   },
 

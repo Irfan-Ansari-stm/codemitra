@@ -21,7 +21,10 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   }
   const token = header.slice(7);
   try {
-    const payload = jwt.verify(token, ACCESS_SECRET) as JwtPayload;
+    const payload = jwt.verify(token, ACCESS_SECRET, {
+      issuer: 'codeverse',
+      audience: 'codeverse-api',
+    }) as JwtPayload;
     req.user = {
       id: payload.sub,
       tenantId: payload.tenantId,
@@ -41,7 +44,10 @@ export function optionalAuth(req: Request, _res: Response, next: NextFunction): 
   const header = req.headers.authorization;
   if (header?.startsWith('Bearer ')) {
     try {
-      const payload = jwt.verify(header.slice(7), ACCESS_SECRET) as JwtPayload;
+      const payload = jwt.verify(header.slice(7), ACCESS_SECRET, {
+        issuer: 'codeverse',
+        audience: 'codeverse-api',
+      }) as JwtPayload;
       req.user = {
         id: payload.sub,
         tenantId: payload.tenantId,

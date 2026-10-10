@@ -1,16 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Mail, Lock, AlertCircle } from 'lucide-react';
 import { useLogin } from '@/hooks/useAuth';
-import { useAuthStore } from '@/store/authStore';
+import { getErrorMessage } from '@/lib/api';
 
 export default function LoginPage() {
-  const router = useRouter();
-  const { login, isLoading, error } = useLogin();
-  const setUser = useAuthStore((state) => state.setUser);
+  const { mutateAsync: login, isPending: isLoading, error } = useLogin();
   
   const [formData, setFormData] = useState({
     email: '',
@@ -29,15 +26,9 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await login(formData.email, formData.password);
-      if (response.data?.user) {
-        setUser(response.data.user);
-        setTimeout(() => {
-          router.push('/dashboard');
-        }, 100);
-      }
+      await login({ email: formData.email.trim(), password: formData.password });
     } catch (err) {
-      setLocalError('Invalid email or password');
+      setLocalError(getErrorMessage(err));
     }
   };
 
@@ -67,7 +58,7 @@ export default function LoginPage() {
             <div className="flex items-center gap-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
               <AlertCircle size={20} className="text-red-600" />
               <p className="text-sm text-red-600 dark:text-red-400">
-                {error || localError}
+                {localError || getErrorMessage(error)}
               </p>
             </div>
           )}
@@ -132,7 +123,7 @@ export default function LoginPage() {
 
         {/* Sign Up Link */}
         <p className="text-center text-gray-600 dark:text-gray-400 mt-6">
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <Link href="/register" className="text-primary hover:underline font-medium">
             Sign up
           </Link>
