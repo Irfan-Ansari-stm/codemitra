@@ -1,7 +1,0 @@
-connection.env
-*.dump
-*.backup
-*.sql.gz
-backups/
-temp/
-*.log
