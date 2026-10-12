@@ -41,13 +41,124 @@ export interface Tenant {
 // Course Structure
 export type ContentStatus = 'draft' | 'published' | 'archived';
 
+export type CourseSort = 'newest' | 'oldest' | 'title' | 'popular';
+
+export interface CourseProgressSummary {
+  totalLessons: number;
+  completedLessons: number;
+  percent: number;
+  lastAccessedAt?: string | null;
+  completedAt?: string | null;
+}
+
 export interface Course {
   id: string;
+  tenantId?: string | null;
   title: string;
   description?: string;
   thumbnailUrl?: string;
   status: ContentStatus;
   languageTags: string[];
+  sortOrder?: number;
+  createdAt: string;
+  updatedAt?: string;
+  createdByName?: string;
+  createdByAvatarUrl?: string | null;
+  moduleCount?: number;
+  chapterCount?: number;
+  totalMinutes?: number;
+  enrollmentCount?: number;
+  isEnrolled?: boolean;
+  progress?: CourseProgressSummary | null;
+}
+
+export interface CourseChapter {
+  id: string;
+  moduleId: string;
+  title: string;
+  content?: string;
+  orderIndex: number;
+  status: ContentStatus;
+  estimatedMinutes?: number;
+  createdAt: string;
+  updatedAt: string;
+  isCompleted?: boolean;
+}
+
+export interface CourseModule {
+  id: string;
+  courseId: string;
+  title: string;
+  description?: string;
+  orderIndex: number;
+  status: ContentStatus;
+  createdAt: string;
+  updatedAt: string;
+  chapterCount?: number;
+  chapters?: CourseChapter[];
+}
+
+export interface CourseDetail extends Course {
+  modules: CourseModule[];
+  lessonCount: number;
+  totalMinutes: number;
+  enrollmentCount: number;
+  isEnrolled: boolean;
+  progress: CourseProgressSummary | null;
+}
+
+export interface CourseListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  language?: string;
+  status?: ContentStatus;
+  sort?: CourseSort;
+  order?: 'asc' | 'desc';
+}
+
+export interface CourseListResponse {
+  courses: Course[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface CourseStats {
+  totalCourses: number;
+  publishedCourses: number;
+  totalModules: number;
+  totalLessons: number;
+}
+
+export interface EnrollmentRecord {
+  id: string;
+  courseId: string;
+  studentId: string;
+  tenantId: string;
+  enrolledAt: string;
+  enrolledBy?: string | null;
+  isActive: boolean;
+}
+
+export interface EnrolledCourse extends Course {
+  enrolledAt: string;
+  chapterCount: number;
+  completedLessons: number;
+}
+
+export interface ChapterProgress {
+  id: string;
+  userId: string;
+  chapterId: string;
+  tenantId: string;
+  isCompleted: boolean;
+  completionPercent: number;
+  problemsSolved: number;
+  problemsTotal: number;
+  lastAccessedAt?: string | null;
+  completedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -99,7 +210,30 @@ export interface Problem {
   isDeleted?: boolean;
   createdAt: string;
   updatedAt: string;
+  // Populated by GET /problems when an authenticated user is present
+  acceptanceRate?: number | null;
+  solved?: boolean;
+  bookmarked?: boolean;
+  createdByName?: string;
 }
+
+export interface ProblemListResponse {
+  problems: Problem[];
+  total: number;
+}
+
+export type ProblemSortField =
+  | 'created_at'
+  | 'title'
+  | 'difficulty'
+  | 'acceptance_rate'
+  | 'total_submissions';
+
+export type ProblemSortOrder = 'asc' | 'desc';
+
+export type ProblemStatusFilter = 'all' | 'solved' | 'unsolved';
+
+export type ProblemDifficultyFilter = 'all' | Difficulty;
 
 export interface TestCase {
   id: string;
@@ -275,24 +409,96 @@ export interface Notification {
 }
 
 // Blog
+export type BlogStatus = 'draft' | 'published' | 'archived';
+export type BlogSort = 'newest' | 'oldest' | 'updated' | 'popular' | 'title';
+
+export interface BlogAuthor {
+  id: string;
+  name: string;
+  avatarUrl?: string | null;
+  bio?: string | null;
+}
+
+export interface BlogCategory {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  postCount?: number;
+}
+
+export interface BlogTag {
+  tag: string;
+  count: number;
+}
+
 export interface BlogPost {
   id: string;
   title: string;
   slug: string;
-  excerpt?: string;
+  excerpt?: string | null;
   content: string;
-  coverImageUrl?: string;
+  coverImageUrl?: string | null;
   tags: string[];
-  status: 'draft' | 'published' | 'archived';
+  status: BlogStatus;
   isFeatured: boolean;
   viewCount: number;
-  readTimeMinutes?: number;
-  publishedAt?: string;
-  seoTitle?: string;
-  seoDescription?: string;
+  readTimeMinutes?: number | null;
+  publishedAt?: string | null;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
   authorId: string;
+  authorName: string;
+  authorAvatarUrl?: string | null;
+  authorBio?: string | null;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  categorySlug?: string | null;
   createdAt: string;
   updatedAt: string;
+  bookmarked?: boolean;
+}
+
+export interface AdjacentPost {
+  id: string;
+  title: string;
+  slug: string;
+  coverImageUrl?: string | null;
+}
+
+export interface BlogListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  category?: string;
+  tag?: string;
+  sort?: BlogSort;
+  featured?: boolean;
+}
+
+export interface BlogListResponse {
+  posts: BlogPost[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface BlogPostDetailResponse {
+  success: boolean;
+  data: BlogPost;
+  adjacent?: {
+    previous: AdjacentPost | null;
+    next: AdjacentPost | null;
+  };
+}
+
+export interface NewsletterSubscription {
+  id: string;
+  email: string;
+  name?: string | null;
+  subscribedAt: string;
+  unsubscribedAt?: string | null;
 }
 
 // API Response Wrapper

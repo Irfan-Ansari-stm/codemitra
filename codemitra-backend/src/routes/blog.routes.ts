@@ -2,227 +2,263 @@ import { Router } from 'express';
 import { requireAuth, optionalAuth } from '../middleware/auth';
 import { isSuperAdmin } from '../middleware/rbac';
 import { validate } from '../middleware/validate';
-import { createBlogPostSchema, paginationSchema } from '../validators';
+import { createBlogPostSchema, blogQuerySchema, paginationSchema } from '../validators';
 import { AppError } from '../middleware/errorHandler';
-import { pool } from '../db';
 import { toSlug, toUniqueSlug } from '../utils/slug';
+import * as blogService from '../services/blog.service';
+import type { BlogSort } from '../services/blog.service';
 
 export const blogRouter = Router();
 
-blogRouter.get('/', optionalAuth, validate(paginationSchema, 'query'), async (req, res, next) => {
+interface ParsedBlogQuery {
+  page?: number;
+  limit?: number;
+  search?: string;
+  category?: string;
+  tag?: string;
+  sort?: BlogSort;
+  featured?: boolean;
+}
+
+function isAdminRole(req: any): boolean {
+  return !!req.user && ['super_admin', 'institution_admin'].includes(req.user.role);
+}
+
+// ── Public reads ───────────────────────────────────────────────
+
+// GET /api/v1/blog — list published posts with search, filters, sorting
+blogRouter.get('/', optionalAuth, validate(blogQuerySchema, 'query'), async (req, res, next) => {
   try {
-    const { page, limit } = req.query as any;
-    const isAdmin = req.user && ['super_admin', 'institution_admin'].includes(req.user.role);
-    const filter = isAdmin ? '' : "AND status='published'";
-    const [rows, count] = await Promise.all([
-      pool.query(`SELECT bp.id,bp.title,bp.slug,bp.excerpt,bp.cover_image_url,bp.tags,bp.status,bp.is_featured,bp.read_time_minutes,bp.view_count,bp.published_at,bp.created_at,u.name AS author_name,bc.name AS category_name FROM blog_posts bp JOIN users u ON u.id=bp.author_id LEFT JOIN blog_categories bc ON bc.id=bp.category_id WHERE true ${filter} ORDER BY bp.published_at DESC NULLS LAST,bp.created_at DESC LIMIT $1 OFFSET $2`, [limit, (page - 1) * limit]),
-      pool.query(`SELECT COUNT(*) FROM blog_posts WHERE true ${filter}`),
-    ]);
-    res.json({ success: true, data: rows.rows, total: Number(count.rows[0].count) });
-  } catch (err) { next(err); }
+    const query = req.query as unknown as ParsedBlogQuery;
+    const result = await blogService.listPosts(
+      {
+        page: query.page,
+        limit: query.limit,
+        search: query.search,
+        category: query.category,
+        tag: query.tag,
+        sort: query.sort,
+        featured: query.featured,
+      },
+      isAdminRole(req),
+      req.user?.id
+    );
+    res.json({ success: true, ...result });
+  } catch (err) {
+    next(err);
+  }
 });
 
-// GET /api/v1/blog/categories
+// GET /api/v1/blog/categories — categories with published post counts
 blogRouter.get('/categories', async (_req, res, next) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM blog_categories ORDER BY name'
-    );
-    res.json({ success: true, data: result.rows });
+    const categories = await blogService.getCategories();
+    res.json({ success: true, data: categories });
   } catch (err) {
     next(err);
   }
 });
 
-// GET /api/v1/blog/posts
-blogRouter.get(
-  '/posts',
-  optionalAuth,
-  validate(paginationSchema, 'query'),
-  async (req, res, next) => {
-    try {
-      const { page, limit } = req.query as any;
-      const offset = (page - 1) * limit;
-
-      const isAdmin =
-        req.user && ['super_admin', 'institution_admin'].includes(req.user.role);
-      const statusFilter = isAdmin ? '' : `AND status = 'published'`;
-
-      const result = await pool.query(
-        `SELECT bp.id, bp.title, bp.slug, bp.excerpt, bp.cover_image_url,
-                bp.tags, bp.status, bp.is_featured, bp.read_time_minutes,
-                bp.view_count, bp.published_at, bp.created_at,
-                u.name AS author_name,
-                bc.name AS category_name
-         FROM blog_posts bp
-         JOIN users u ON u.id = bp.author_id
-         LEFT JOIN blog_categories bc ON bc.id = bp.category_id
-         WHERE 1=1 ${statusFilter}
-         ORDER BY bp.published_at DESC NULLS LAST, bp.created_at DESC
-         LIMIT $1 OFFSET $2`,
-        [limit, offset]
-      );
-
-      const count = await pool.query(
-        `SELECT COUNT(*) FROM blog_posts WHERE 1=1 ${statusFilter}`
-      );
-
-      res.json({
-        success: true,
-        data: result.rows,
-        total: parseInt(count.rows[0].count),
-      });
-    } catch (err) {
-      next(err);
-    }
+// GET /api/v1/blog/tags — all tags with published post counts
+blogRouter.get('/tags', async (_req, res, next) => {
+  try {
+    const tags = await blogService.getTags();
+    res.json({ success: true, data: tags });
+  } catch (err) {
+    next(err);
   }
-);
+});
 
-// GET /api/v1/blog/posts/:slug
+// GET /api/v1/blog/featured — the latest published featured article
+blogRouter.get('/featured', optionalAuth, async (req, res, next) => {
+  try {
+    const post = await blogService.getFeaturedPost(isAdminRole(req));
+    res.json({ success: true, data: post });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/v1/blog/related/:slug — published articles sharing category or tags
+blogRouter.get('/related/:slug', optionalAuth, async (req, res, next) => {
+  try {
+    const limit = Math.min(10, Number(req.query.limit) || 3);
+    const posts = await blogService.getRelatedPosts(req.params.slug, limit);
+    res.json({ success: true, data: posts });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/v1/blog/posts/:slug — single published article by slug
 blogRouter.get('/posts/:slug', optionalAuth, async (req, res, next) => {
   try {
-    const result = await pool.query(
-      `SELECT bp.*, u.name AS author_name, bc.name AS category_name
-       FROM blog_posts bp
-       JOIN users u ON u.id = bp.author_id
-       LEFT JOIN blog_categories bc ON bc.id = bp.category_id
-       WHERE bp.slug = $1 LIMIT 1`,
-      [req.params.slug]
-    );
-    if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Blog post not found');
-
-    // Increment view count
-    await pool.query(
-      'UPDATE blog_posts SET view_count = view_count + 1 WHERE slug = $1',
-      [req.params.slug]
-    );
-
-    res.json({ success: true, data: result.rows[0] });
+    const post = await blogService.getPostBySlug(req.params.slug, isAdminRole(req), req.user?.id);
+    if (!post) throw new AppError(404, 'NOT_FOUND', 'Blog post not found');
+    // Count real public views; admin previews do not inflate the counter.
+    if (post.status === 'published') {
+      await blogService.incrementViewCount(post.slug);
+      post.view_count += 1;
+    }
+    const adjacent = await blogService.getAdjacentPosts(post.slug);
+    res.json({ success: true, data: post, adjacent });
   } catch (err) {
     next(err);
   }
 });
 
+// GET /api/v1/blog/slug/:slug — backward-compatible alias
 blogRouter.get('/slug/:slug', optionalAuth, async (req, res, next) => {
   try {
-    const result = await pool.query(
-      `SELECT bp.*,u.name AS author_name,bc.name AS category_name FROM blog_posts bp
-       JOIN users u ON u.id=bp.author_id LEFT JOIN blog_categories bc ON bc.id=bp.category_id WHERE bp.slug=$1 LIMIT 1`, [req.params.slug]
-    );
-    if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Blog post not found');
-    await pool.query('UPDATE blog_posts SET view_count=view_count+1 WHERE id=$1', [result.rows[0].id]);
-    res.json({ success: true, data: result.rows[0] });
-  } catch (err) { next(err); }
+    const post = await blogService.getPostBySlug(req.params.slug, isAdminRole(req), req.user?.id);
+    if (!post) throw new AppError(404, 'NOT_FOUND', 'Blog post not found');
+    if (post.status === 'published') {
+      await blogService.incrementViewCount(post.slug);
+      post.view_count += 1;
+    }
+    res.json({ success: true, data: post });
+  } catch (err) {
+    next(err);
+  }
 });
 
+// ── Authenticated bookmarks ────────────────────────────────────
+// Registered before /:id so /bookmarks is not captured by the
+// parameterized single-post route.
+
+// GET /api/v1/blog/bookmarks — the signed-in user's saved articles
+blogRouter.get('/bookmarks', requireAuth, validate(paginationSchema, 'query'), async (req, res, next) => {
+  try {
+    const query = req.query as unknown as { page?: number; limit?: number };
+    const result = await blogService.getBookmarkedPosts(
+      req.user!.id,
+      query.page,
+      query.limit
+    );
+    res.json({ success: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/v1/blog/:id/bookmark — check whether the article is saved
+blogRouter.get('/:id/bookmark', requireAuth, async (req, res, next) => {
+  try {
+    const bookmarked = await blogService.isPostBookmarked(req.user!.id, req.params.id);
+    res.json({ success: true, data: { bookmarked } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/v1/blog/:id/bookmark — save the article
+blogRouter.put('/:id/bookmark', requireAuth, async (req, res, next) => {
+  try {
+    await blogService.addBookmark(req.user!.id, req.params.id);
+    res.json({ success: true, data: { bookmarked: true } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/v1/blog/:id/bookmark — remove the saved article
+blogRouter.delete('/:id/bookmark', requireAuth, async (req, res, next) => {
+  try {
+    await blogService.removeBookmark(req.user!.id, req.params.id);
+    res.json({ success: true, data: { bookmarked: false } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/v1/blog/:id — single article by id
 blogRouter.get('/:id', optionalAuth, async (req, res, next) => {
   try {
-    const result = await pool.query(
-      `SELECT bp.*, u.name AS author_name, bc.name AS category_name
-       FROM blog_posts bp JOIN users u ON u.id=bp.author_id
-       LEFT JOIN blog_categories bc ON bc.id=bp.category_id WHERE bp.id=$1 LIMIT 1`,
-      [req.params.id]
-    );
-    if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Blog post not found');
-    res.json({ success: true, data: result.rows[0] });
-  } catch (err) { next(err); }
+    const post = await blogService.getPostById(req.params.id, isAdminRole(req), req.user?.id);
+    if (!post) throw new AppError(404, 'NOT_FOUND', 'Blog post not found');
+    res.json({ success: true, data: post });
+  } catch (err) {
+    next(err);
+  }
 });
 
-// POST /api/v1/blog/posts — super_admin only
-blogRouter.post(
-  '/posts',
-  requireAuth,
-  isSuperAdmin,
-  validate(createBlogPostSchema),
-  async (req, res, next) => {
-    try {
-      const slug = req.body.slug ? toSlug(req.body.slug) : toUniqueSlug(req.body.title);
-      const result = await pool.query(
-        `INSERT INTO blog_posts
-           (author_id, category_id, title, slug, excerpt, content,
-            cover_image_url, tags, is_featured, seo_title, seo_description, status, read_time_minutes, published_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,CASE WHEN $12='published' THEN NOW() ELSE NULL END) RETURNING *`,
-        [
-          req.user!.id,
-          req.body.categoryId || null,
-          req.body.title,
-          slug,
-          req.body.excerpt || null,
-          req.body.content,
-          req.body.coverImageUrl || null,
-          `{${(req.body.tags || []).join(',')}}`,
-          req.body.isFeatured ?? false,
-          req.body.seoTitle || null,
-          req.body.seoDescription || null,
-          req.body.status || 'draft',
-          req.body.readTimeMinutes || 5,
-        ]
-      );
-      res.status(201).json({ success: true, data: result.rows[0] });
-    } catch (err) {
-      next(err);
-    }
-  }
-);
+// ── Admin writes ───────────────────────────────────────────────
 
+function mapCreateBody(body: any, authorId: string) {
+  return {
+    authorId,
+    categoryId: body.categoryId || null,
+    title: body.title,
+    slug: body.slug ? toSlug(body.slug) : toUniqueSlug(body.title),
+    excerpt: body.excerpt || null,
+    content: body.content,
+    coverImageUrl: body.coverImageUrl || null,
+    tags: body.tags || [],
+    isFeatured: body.isFeatured ?? false,
+    seoTitle: body.seoTitle || null,
+    seoDescription: body.seoDescription || null,
+    status: body.status || 'draft',
+    readTimeMinutes: body.readTimeMinutes ?? null,
+  };
+}
+
+// POST /api/v1/blog — create a post (super_admin)
 blogRouter.post('/', requireAuth, isSuperAdmin, validate(createBlogPostSchema), async (req, res, next) => {
   try {
-    const slug = req.body.slug ? toSlug(req.body.slug) : toUniqueSlug(req.body.title);
-    const result = await pool.query(
-      `INSERT INTO blog_posts (author_id,category_id,title,slug,excerpt,content,cover_image_url,tags,status,is_featured,read_time_minutes,seo_title,seo_description,published_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,CASE WHEN $9='published' THEN NOW() ELSE NULL END) RETURNING *`,
-      [req.user!.id,req.body.categoryId||null,req.body.title,slug,req.body.excerpt||null,req.body.content,req.body.coverImageUrl||null,
-       `{${(req.body.tags||[]).join(',')}}`,req.body.status||'draft',req.body.isFeatured??false,req.body.readTimeMinutes||5,req.body.seoTitle||null,req.body.seoDescription||null]
-    );
-    res.status(201).json({ success: true, data: result.rows[0] });
-  } catch (err) { next(err); }
+    const post = await blogService.createPost(mapCreateBody(req.body, req.user!.id));
+    res.status(201).json({ success: true, data: post });
+  } catch (err) {
+    next(err);
+  }
 });
 
+// POST /api/v1/blog/posts — backward-compatible create (super_admin)
+blogRouter.post('/posts', requireAuth, isSuperAdmin, validate(createBlogPostSchema), async (req, res, next) => {
+  try {
+    const post = await blogService.createPost(mapCreateBody(req.body, req.user!.id));
+    res.status(201).json({ success: true, data: post });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /api/v1/blog/:id — update a post (super_admin)
 blogRouter.patch('/:id', requireAuth, isSuperAdmin, async (req, res, next) => {
   try {
-    const mapped = { ...req.body };
+    const mapped: Record<string, unknown> = { ...req.body };
     if ('isFeatured' in mapped) mapped.is_featured = mapped.isFeatured;
     if ('readTimeMinutes' in mapped) mapped.read_time_minutes = mapped.readTimeMinutes;
-    const allowed = ['title','excerpt','content','cover_image_url','tags','status','is_featured','read_time_minutes','seo_title','seo_description'];
-    const fields = Object.keys(mapped).filter((key) => allowed.includes(key));
-    if (!fields.length) throw new AppError(400, 'NO_FIELDS', 'No valid fields to update');
-    let sets = fields.map((key,i) => `${key}=$${i+2}`).join(', ');
-    const values = fields.map((key) => key==='tags' ? `{${mapped[key].join(',')}}` : mapped[key]);
-    if (mapped.status === 'published') sets += ', published_at=COALESCE(published_at,NOW())';
-    const result = await pool.query(`UPDATE blog_posts SET ${sets}, updated_at=NOW() WHERE id=$1 RETURNING *`, [req.params.id,...values]);
-    if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Blog post not found');
-    res.json({ success: true, data: result.rows[0] });
-  } catch (err) { next(err); }
+    if ('coverImageUrl' in mapped) mapped.cover_image_url = mapped.coverImageUrl;
+    if ('seoTitle' in mapped) mapped.seo_title = mapped.seoTitle;
+    if ('seoDescription' in mapped) mapped.seo_description = mapped.seoDescription;
+    if ('categoryId' in mapped) mapped.category_id = mapped.categoryId;
+
+    const post = await blogService.updatePost(req.params.id, mapped);
+    if (!post) throw new AppError(404, 'NOT_FOUND', 'Blog post not found');
+    res.json({ success: true, data: post });
+  } catch (err) {
+    next(err);
+  }
 });
 
+// DELETE /api/v1/blog/:id — archive a post (super_admin)
 blogRouter.delete('/:id', requireAuth, isSuperAdmin, async (req, res, next) => {
   try {
-    const result = await pool.query(
-      `UPDATE blog_posts SET status='archived', updated_at=NOW() WHERE id=$1 RETURNING id`,
-      [req.params.id]
-    );
-    if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Blog post not found');
+    const archived = await blogService.archivePost(req.params.id);
+    if (!archived) throw new AppError(404, 'NOT_FOUND', 'Blog post not found');
     res.json({ success: true, data: { message: 'Blog post archived' } });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
-// PATCH /api/v1/blog/posts/:id/publish — publish a draft post
-blogRouter.patch(
-  '/posts/:id/publish',
-  requireAuth,
-  isSuperAdmin,
-  async (req, res, next) => {
-    try {
-      const result = await pool.query(
-        `UPDATE blog_posts
-         SET status = 'published', published_at = NOW(), updated_at = NOW()
-         WHERE id = $1 RETURNING *`,
-        [req.params.id]
-      );
-      if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Post not found');
-      res.json({ success: true, data: result.rows[0] });
-    } catch (err) {
-      next(err);
-    }
+// PATCH /api/v1/blog/posts/:id/publish — publish a draft (super_admin)
+blogRouter.patch('/posts/:id/publish', requireAuth, isSuperAdmin, async (req, res, next) => {
+  try {
+    const post = await blogService.updatePost(req.params.id, { status: 'published' });
+    if (!post) throw new AppError(404, 'NOT_FOUND', 'Post not found');
+    res.json({ success: true, data: post });
+  } catch (err) {
+    next(err);
   }
-);
+});

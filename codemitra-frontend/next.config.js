@@ -2,6 +2,8 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+  // Keep the live dev server's mutable webpack artifacts separate from production builds.
+  distDir: process.env.NODE_ENV === 'development' ? '.next-dev' : '.next',
 
   images: {
     remotePatterns: [

@@ -4,21 +4,25 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import {
-  BarChart3, BookOpen, Code2, Home, LayoutDashboard, LogOut, Menu, Settings,
-  Users, X, ClipboardList, Bell, FileText,
+  BarChart3, BookOpen, Building2, Code2, Home, LayoutDashboard, LogOut, Menu, Settings,
+  UserRound, Users, X, ClipboardList, Bell, FileText,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useLogout } from '@/hooks/useAuth';
+import { useCurrentTenant } from '@/hooks/useTenant';
+import { institutionHref } from '@/lib/workspace';
 
 type NavLink = { label: string; href: string; icon: typeof Home };
 type NavGroup = { label: string; links: NavLink[] };
 
-function groupsForRole(role: string): NavGroup[] {
+function groupsForRole(role: string, tenantSlug?: string): NavGroup[] {
   if (role === 'super_admin') return [
     { label: 'Workspace', links: [
       { label: 'Overview', href: '/super-admin/dashboard', icon: LayoutDashboard },
       { label: 'Institutions', href: '/super-admin/institutions', icon: Home },
-      { label: 'Users', href: '/super-admin/users', icon: Users },
+      { label: 'General users', href: '/super-admin/general-users', icon: UserRound },
+      { label: 'Institution users', href: '/super-admin/users', icon: Building2 },
+      { label: 'Courses', href: '/super-admin/courses', icon: BookOpen },
     ] },
     { label: 'Platform', links: [
       { label: 'Problems', href: '/super-admin/problems', icon: Code2 },
@@ -26,7 +30,12 @@ function groupsForRole(role: string): NavGroup[] {
     ] },
   ];
 
-  const links: NavLink[] = [{ label: 'Overview', href: '/institution/dashboard', icon: LayoutDashboard }];
+  const isGeneralStudent = role === 'general_student';
+  const links: NavLink[] = [{
+    label: 'Overview',
+    href: isGeneralStudent ? '/dashboard' : '/institution/dashboard',
+    icon: LayoutDashboard,
+  }];
   if (role === 'institution_admin') links.push(
     { label: 'Courses', href: '/institution/courses', icon: BookOpen },
     { label: 'Problems', href: '/institution/problems', icon: Code2 },
@@ -35,9 +44,9 @@ function groupsForRole(role: string): NavGroup[] {
     { label: 'Students', href: '/institution/students', icon: Users },
     { label: 'Analytics', href: '/institution/analytics', icon: BarChart3 },
   );
-  if (role === 'institution_student' || role === 'general_student') links.push(
+  if (role === 'institution_student' || isGeneralStudent) links.push(
     { label: 'Courses', href: '/institution/courses', icon: BookOpen },
-    { label: 'Problems', href: '/problems', icon: Code2 },
+    { label: 'Problems', href: isGeneralStudent ? '/dashboard/problems' : '/institution/problems', icon: Code2 },
     { label: 'Assignments', href: '/institution/assignments', icon: ClipboardList },
   );
   links.push({ label: 'Notifications', href: '/institution/notifications', icon: Bell });
@@ -45,12 +54,27 @@ function groupsForRole(role: string): NavGroup[] {
     { label: 'Announcements', href: '/institution/announcements', icon: FileText },
     { label: 'Settings', href: '/institution/settings', icon: Settings },
   );
-  return [{ label: 'Workspace', links }];
+  return [{
+    label: 'Workspace',
+    links: links.map((link) => ({
+      ...link,
+      href: userHasTenantWorkspace(role) ? institutionHref(link.href, tenantSlug) : link.href,
+    })),
+  }];
+}
+
+function userHasTenantWorkspace(role: string): boolean {
+  return role === 'institution_admin' || role === 'institution_student';
 }
 
 export default function Sidebar() {
   const pathname = usePathname();
   const user = useAuthStore((state) => state.user);
+  const tenantQuery = useCurrentTenant();
+  const tenantSlug = tenantQuery.data?.slug;
+  const activePath = tenantSlug && pathname.startsWith('/institution/')
+    ? institutionHref(pathname, tenantSlug)
+    : pathname;
   const [open, setOpen] = useState(false);
   const logout = useLogout();
   if (!user) return null;
@@ -65,10 +89,10 @@ export default function Sidebar() {
         <span className="ml-auto rounded-md border border-slate-200 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400">{user.role === 'super_admin' ? 'Platform' : 'Workspace'}</span>
       </Link>
       <nav aria-label="Workspace navigation" className="flex-1 space-y-6 overflow-y-auto px-3 py-5">
-        {groupsForRole(user.role).map((group) => <section key={group.label}>
+        {groupsForRole(user.role, tenantSlug).map((group) => <section key={group.label}>
           <h2 className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{group.label}</h2>
           <div className="space-y-1">{group.links.map(({ label, href, icon: Icon }) => {
-            const active = pathname === href || (href !== '/problems' && href !== '/institution/dashboard' && pathname.startsWith(`${href}/`));
+            const active = activePath === href || (label !== 'Overview' && activePath.startsWith(`${href}/`));
             return <Link key={href} href={href} onClick={() => setOpen(false)} aria-current={active ? 'page' : undefined} className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${active ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white'}`}>
               <Icon size={17} strokeWidth={active ? 2.2 : 1.8} /><span>{label}</span>{active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-blue-600 dark:bg-blue-400" />}
             </Link>;

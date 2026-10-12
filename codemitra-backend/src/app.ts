@@ -14,6 +14,7 @@ import { assignmentRouter, assignmentCompatRouter } from './routes/assignment.ro
 import { quizRouter, quizCompatRouter } from './routes/quiz.routes';
 import { analyticsRouter } from './routes/analytics.routes';
 import { blogRouter } from './routes/blog.routes';
+import { newsletterRouter } from './routes/newsletter.routes';
 import { notificationRouter, announcementRouter } from './routes/notification.routes';
 import { globalRateLimiter } from './middleware/rateLimit';
 import { errorHandler } from './middleware/errorHandler';
@@ -91,6 +92,7 @@ export function createApp(): Application {
   app.use('/api/v1', quizCompatRouter);
   app.use('/api/v1/analytics', analyticsRouter);
   app.use('/api/v1/blog', blogRouter);
+  app.use('/api/v1/newsletter', newsletterRouter);
   app.use('/api/v1/notifications', notificationRouter);
   app.use('/api/v1/announcements', announcementRouter);
 

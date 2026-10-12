@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { authApi, setAccessToken } from '@/lib/api';
+import { authApi, setAccessToken, tenantApi } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 
 export function useLogin() {
@@ -12,19 +12,32 @@ export function useLogin() {
     mutationFn: ({ email, password }: { email: string; password: string }) =>
       authApi.login(email, password),
     onMutate: () => setLoading(true),
-    onSuccess: ({ data }) => {
+    onSuccess: async ({ data }) => {
       setAccessToken(data.data.accessToken);
       setUser(data.data.user);
       qc.clear();
 
-      // Redirect based on role
       const role = data.data.user.role;
       if (role === 'super_admin') {
         router.push('/super-admin/dashboard');
+      } else if (role === 'general_student') {
+        router.push('/dashboard');
       } else if (role === 'institution_admin') {
-        router.push('/institution/dashboard');
+        try {
+          const tenant = await tenantApi.current();
+          router.push(`/${tenant.data.data.slug}/dashboard`);
+        } catch (error) {
+          console.error('Could not load institution workspace after login:', error);
+          router.push('/institution/dashboard');
+        }
       } else {
-        router.push('/institution/dashboard');
+        try {
+          const tenant = await tenantApi.current();
+          router.push(`/${tenant.data.data.slug}/dashboard`);
+        } catch (error) {
+          console.error('Could not load institution workspace after login:', error);
+          router.push('/institution/dashboard');
+        }
       }
     },
     onError: (error) => {

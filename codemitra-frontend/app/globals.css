@@ -24,28 +24,31 @@
     --primary-foreground: 0 0% 100%;
     --secondary: 215 32% 66%;
     --secondary-foreground: 0 0% 100%;
+    /* Theme-aware decorative line color (grid / dot patterns) */
+    --grid-line: 15 23 42;
   }
 
   .dark {
-    --background: 0 0% 3.6%;
+    --background: 220 43% 3%;
     --foreground: 0 0% 98%;
-    --card: 0 0% 7%;
+    --card: 220 38% 6%;
     --card-foreground: 0 0% 98%;
-    --popover: 0 0% 7%;
+    --popover: 220 38% 6%;
     --popover-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
+    --muted: 220 35% 12%;
     --muted-foreground: 0 0% 63.9%;
     --accent: 0 84.2% 60.2%;
     --accent-foreground: 0 0% 3.6%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 3.6%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
+    --border: 220 30% 14%;
+    --input: 220 30% 14%;
     --ring: 0 84.2% 60.2%;
     --primary: 215 88% 58%;
     --primary-foreground: 0 0% 3.6%;
     --secondary: 215 32% 66%;
     --secondary-foreground: 0 0% 3.6%;
+    --grid-line: 255 255 255;
   }
 }
 
@@ -268,4 +271,55 @@
 
 .prose blockquote {
   @apply border-l-4 border-primary pl-4 italic text-muted-foreground;
+}
+
+/* ---------- Enterprise design system utilities ---------- */
+
+/* Subtle blueprint grid for hero backgrounds (theme-aware via --grid-line) */
+.bg-grid-pattern {
+  background-image:
+    linear-gradient(to right, rgb(var(--grid-line) / 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(var(--grid-line) / 0.04) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+/* Dotted grid variant */
+.bg-dot-pattern {
+  background-image: radial-gradient(circle, rgb(var(--grid-line) / 0.08) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Fade masks for background effects */
+.mask-fade-b {
+  -webkit-mask-image: linear-gradient(to bottom, black 30%, transparent 90%);
+  mask-image: linear-gradient(to bottom, black 30%, transparent 90%);
+}
+
+.mask-fade-x {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 20%, black 80%, transparent);
+  mask-image: linear-gradient(to right, transparent, black 20%, black 80%, transparent);
+}
+
+/* Refined focus visibility for interactive elements */
+a:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid rgb(71 128 255 / 0.8);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

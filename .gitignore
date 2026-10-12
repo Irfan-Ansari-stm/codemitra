@@ -19,6 +19,11 @@ coverage/
 
 # Local DB and secrets
 codemitra-db/
+!codemitra-db/
+codemitra-db/*
+!codemitra-db/migrations/
+codemitra-db/migrations/*
+!codemitra-db/migrations/007_problem_bookmarks.sql
 **/connection.env
 **/backups/
 **/*.dump

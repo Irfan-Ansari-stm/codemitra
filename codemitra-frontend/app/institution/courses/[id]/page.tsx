@@ -1,14 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, usePathname } from 'next/navigation';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { ArrowLeft, BookOpen, ChevronDown, Clock3 } from 'lucide-react';
 import { courseApi } from '@/lib/api';
 import type { Chapter, Course, Module } from '@/types';
+import { useCurrentTenant } from '@/hooks/useTenant';
+import { institutionHref } from '@/lib/workspace';
 
 export default function CourseDetailsPage() {
   const { id } = useParams<{ id: string }>();
+  const pathname = usePathname();
+  const tenant = useCurrentTenant();
   const courseQuery = useQuery({ queryKey: ['course', id], queryFn: () => courseApi.get(id).then((response) => response.data.data as Course), enabled: !!id });
   const modulesQuery = useQuery({ queryKey: ['modules', id], queryFn: () => courseApi.getModules(id).then((response) => (response.data.data ?? []) as Module[]), enabled: !!id });
   const modules = modulesQuery.data ?? [];
@@ -20,7 +24,7 @@ export default function CourseDetailsPage() {
   if (courseQuery.error || !course) return <section role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-200"><h1 className="font-semibold">Course unavailable</h1><p className="mt-1">The course details could not be loaded.</p><button type="button" onClick={() => courseQuery.refetch()} className="mt-3 font-medium underline">Retry</button></section>;
 
   return <div className="mx-auto max-w-5xl space-y-6">
-    <Link href="/institution/courses" className="inline-flex items-center gap-2 text-xs font-medium text-slate-500 hover:text-blue-600 dark:hover:text-blue-300"><ArrowLeft size={15} /> Back to courses</Link>
+    <Link href={pathname.startsWith('/super-admin') ? '/super-admin/courses' : institutionHref('/institution/courses', tenant.data?.slug)} className="inline-flex items-center gap-2 text-xs font-medium text-slate-500 hover:text-blue-600 dark:hover:text-blue-300"><ArrowLeft size={15} /> Back to courses</Link>
     <header className="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900 sm:p-8"><div className="flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><span className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300"><BookOpen size={12} /> Course</span><h1 className="mt-4 text-2xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-3xl">{course.title}</h1>{course.description && <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-400">{course.description}</p>}</div><span className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium capitalize text-slate-600 dark:border-slate-700 dark:text-slate-300">{course.status}</span></div>
       <div className="mt-6 flex flex-wrap gap-2">{(course.languageTags ?? []).map((tag) => <span key={tag} className="rounded-md bg-slate-100 px-2.5 py-1 text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">{tag}</span>)}</div>
       <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 border-t border-slate-100 pt-4 text-xs text-slate-500 dark:border-slate-800"><span>{modulesQuery.isLoading ? 'Loading modules…' : `${modules.length} ${modules.length === 1 ? 'module' : 'modules'}`}</span><span>{chapterQueries.some((query) => query.isLoading) ? 'Loading lessons…' : `${chapterCount} ${chapterCount === 1 ? 'lesson' : 'lessons'}`}</span>{course.updatedAt && <span className="inline-flex items-center gap-1.5"><Clock3 size={13} /> Updated {new Date(course.updatedAt).toLocaleDateString()}</span>}</div>

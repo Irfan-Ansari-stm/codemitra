@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { userService } from '../services/user.service';
 import { requireAuth } from '../middleware/auth';
-import { isInstitutionAdmin } from '../middleware/rbac';
+import { isInstitutionAdmin, isSuperAdmin } from '../middleware/rbac';
 import { validate } from '../middleware/validate';
-import { createUserSchema, updateUserSchema, paginationSchema } from '../validators';
+import { createUserSchema, updateUserSchema, userListQuerySchema } from '../validators';
 import { AppError } from '../middleware/errorHandler';
 import { randomBytes } from 'crypto';
 
@@ -14,7 +14,7 @@ userRouter.use(requireAuth);
 userRouter.get(
   '/',
   isInstitutionAdmin,
-  validate(paginationSchema, 'query'),
+  validate(userListQuerySchema, 'query'),
   async (req, res, next) => {
     try {
       const tenantId = req.user!.role === 'super_admin' ? undefined : req.user!.tenantId || undefined;
@@ -56,7 +56,11 @@ userRouter.patch('/me', validate(updateUserSchema), async (req, res, next) => {
 // GET /api/v1/users/:id
 userRouter.get('/:id', isInstitutionAdmin, async (req, res, next) => {
   try {
-      const user = await userService.getById(req.params.id, req.user!.tenantId);
+      const user = await userService.getById(
+        req.params.id,
+        req.user!.role === 'super_admin' ? undefined : req.user!.tenantId,
+        req.user!.role === 'institution_admin'
+      );
       res.json({ success: true, data: { ...user, totalProblemsSolved: user.total_problems_solved } });
   } catch (err) {
     next(err);
@@ -66,15 +70,20 @@ userRouter.get('/:id', isInstitutionAdmin, async (req, res, next) => {
 // POST /api/v1/users — create institution user (admin only)
 userRouter.post(
   '/',
-  isInstitutionAdmin,
+  isSuperAdmin,
   validate(createUserSchema),
   async (req, res, next) => {
     try {
-      const tenantId = req.user!.tenantId;
-      if (!tenantId) throw new AppError(400, 'TENANT_REQUIRED', 'Tenant context required');
+      const tenantId = req.body.tenantId ?? null;
+      if (req.body.role !== 'general_student' && !tenantId) {
+        throw new AppError(400, 'TENANT_REQUIRED', 'Institution users must belong to an institution');
+      }
+      if (req.body.role === 'general_student' && tenantId) {
+        throw new AppError(400, 'INVALID_TENANT', 'General users cannot be assigned to an institution');
+      }
       const user = await userService.createInstitutionUser({
-        tenantId,
         ...req.body,
+        tenantId,
       });
       res.status(201).json({ success: true, data: user });
     } catch (err) {
@@ -85,12 +94,13 @@ userRouter.post(
 
 userRouter.post('/:id/reset-password', isInstitutionAdmin, async (req, res, next) => {
   try {
-    const tenantId = req.user!.tenantId;
-    if (!tenantId) throw new AppError(400, 'TENANT_REQUIRED', 'Tenant context required');
+    const isSuperAdmin = req.user!.role === 'super_admin';
+    const tenantId = isSuperAdmin ? undefined : req.user!.tenantId || undefined;
+    if (!isSuperAdmin && !tenantId) throw new AppError(400, 'TENANT_REQUIRED', 'Tenant context required');
     if (typeof req.body?.newPassword !== 'string' || req.body.newPassword.length < 8 || req.body.newPassword.length > 128) {
       throw new AppError(400, 'VALIDATION_ERROR', 'newPassword must be 8 to 128 characters');
     }
-    await userService.resetPassword(req.params.id, tenantId, req.body.newPassword);
+    await userService.resetPassword(req.params.id, tenantId, req.body.newPassword, !isSuperAdmin);
     res.json({ success: true, data: { message: 'Password reset successfully' } });
   } catch (err) { next(err); }
 });
@@ -110,10 +120,12 @@ function parseCsvRow(line: string): string[] {
   return cells;
 }
 
-userRouter.post('/bulk-import', isInstitutionAdmin, async (req, res, next) => {
+userRouter.post('/bulk-import', isSuperAdmin, async (req, res, next) => {
   try {
-    const tenantId = req.user!.tenantId;
-    if (!tenantId) throw new AppError(400, 'TENANT_REQUIRED', 'Tenant context required');
+    const tenantId = typeof req.query.tenantId === 'string' ? req.query.tenantId : '';
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(tenantId)) {
+      throw new AppError(400, 'TENANT_REQUIRED', 'A valid institution tenantId is required');
+    }
     const contentType = req.headers['content-type'] || '';
     const boundary = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(contentType);
     if (!boundary) throw new AppError(400, 'VALIDATION_ERROR', 'Upload a CSV file in the file field');
@@ -171,7 +183,18 @@ userRouter.patch('/:id', validate(updateUserSchema), async (req, res, next) => {
     ) {
       throw new AppError(403, 'FORBIDDEN', 'Cannot update another user');
     }
-    const user = await userService.update(req.params.id, req.body);
+    const isInstitutionAdminUpdatingStudent =
+      req.user!.role === 'institution_admin' && req.user!.id !== req.params.id;
+    const tenantId = isInstitutionAdminUpdatingStudent ? req.user!.tenantId : undefined;
+    if (isInstitutionAdminUpdatingStudent && !tenantId) {
+      throw new AppError(400, 'TENANT_REQUIRED', 'Tenant context required');
+    }
+    const user = await userService.update(
+      req.params.id,
+      req.body,
+      tenantId,
+      isInstitutionAdminUpdatingStudent
+    );
     res.json({ success: true, data: user });
   } catch (err) {
     next(err);
@@ -181,7 +204,12 @@ userRouter.patch('/:id', validate(updateUserSchema), async (req, res, next) => {
 // DELETE /api/v1/users/:id — soft delete (admin only)
 userRouter.delete('/:id', isInstitutionAdmin, async (req, res, next) => {
   try {
-    await userService.softDelete(req.params.id);
+    const isInstitutionAdmin = req.user!.role === 'institution_admin';
+    const tenantId = isInstitutionAdmin ? req.user!.tenantId : undefined;
+    if (isInstitutionAdmin && !tenantId) {
+      throw new AppError(400, 'TENANT_REQUIRED', 'Tenant context required');
+    }
+    await userService.softDelete(req.params.id, tenantId, isInstitutionAdmin);
     res.json({ success: true, data: { message: 'User deleted' } });
   } catch (err) {
     next(err);

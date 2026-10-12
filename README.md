@@ -278,6 +278,61 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\backup.ps1
 | `NEXT_PUBLIC_ENABLE_ANALYTICS` | No | Toggle analytics UI |
 | `NEXT_PUBLIC_ENABLE_BLOG` | No | Toggle blog UI |
 
+## Course Discovery API
+
+The Courses experience (`/courses`, `/courses/[id]`, `/my-learning`) integrates
+with the following backend endpoints. All course endpoints require a valid JWT
+(`Authorization: Bearer <accessToken>`) and are scoped to the caller's tenant.
+
+| Method | Endpoint | Access | Description |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/courses` | Authenticated | Catalog listing. Supports `search`, `language`, `status`, `sort` (`newest` \| `oldest` \| `title` \| `popular`), `order` (`asc` \| `desc`), `page`, `limit`. When `limit` is supplied the response includes `meta: { total, page, limit, totalPages }`; without `limit` the full list is returned (legacy contract). |
+| `GET` | `/api/v1/courses/featured` | Authenticated | Featured courses. Documented rule: published courses with the most active enrollments, tie-broken by manual `sort_order`, then newest. Optional `limit` (default 3). |
+| `GET` | `/api/v1/courses/stats` | Authenticated | Catalog-wide counts: `totalCourses`, `publishedCourses`, `totalModules`, `totalLessons`. |
+| `GET` | `/api/v1/courses/my-courses` | Authenticated | Courses the current student is enrolled in, with per-course `chapterCount` and `completedLessons` rollup. |
+| `GET` | `/api/v1/courses/:id` | Authenticated | Course detail with nested `modules[].chapters[]`, computed `lessonCount`, `totalMinutes`, `enrollmentCount`, plus `isEnrolled` and `progress` for the current user. |
+| `GET` | `/api/v1/courses/:id/enrollment` | Authenticated | Current user's enrollment record, or `null`. |
+| `POST` | `/api/v1/courses/:id/enroll` | Authenticated | Enroll the current user. Idempotent — re-enrolling reactivates an existing enrollment. |
+| `GET` | `/api/v1/courses/:id/progress` | Authenticated | Completion rollup: `totalLessons`, `completedLessons`, `percent`, `lastAccessedAt`, `completedAt`. |
+| `POST` | `/api/v1/courses/:id/progress` | Authenticated | Mark a chapter complete/incomplete. Body: `{ chapterId: uuid, isCompleted: boolean }`. Upserts the caller's `user_progress` row. |
+
+### Search, filtering, and sorting
+
+- **Search** matches course `title` and `description` (case-insensitive).
+- **Language filter** matches entries in the course `language_tags` array.
+- **Status filter** matches `draft`, `published`, or `archived`.
+- **Sorting** supports newest, oldest, title (A–Z), and most enrolled.
+- **Pagination** is server-side; the frontend never fetches the full catalog
+  for browsing.
+
+### Enrollment and progress model
+
+- Courses are tenant-scoped. Every authenticated member of a tenant can view
+  the catalog and enroll; there is no per-course pricing in the current data
+  model, so enrollment is free within the institution.
+- Enrollment is stored in `course_enrollments` (unique on
+  `(course_id, student_id)`).
+- Lesson completion is stored in `user_progress` keyed by
+  `(user_id, chapter_id)`; course progress is computed as
+  `completed_lessons / total_lessons`.
+
+### Capabilities not yet available
+
+The following LMS capabilities have no backing table or endpoint in the current
+backend, so they are intentionally **not** implemented in the UI (no fabricated
+data):
+
+- **Course reviews & ratings** — no `course_reviews` table or endpoint.
+- **Pricing, discounts, payments, checkout** — no pricing/payment tables or
+  provider integration; courses are free within a tenant.
+- **Course categories** — courses use a `language_tags` array instead of a
+  category taxonomy; the UI filters by language tags.
+- **Course slugs** — courses are addressed by UUID (`/courses/[id]`), not slug.
+- **Instructor directory** — only the course creator's name is exposed via
+  `created_by_name`; there is no dedicated instructor profile endpoint.
+- **Certificates** — a `certificates` table exists (migration 005) but has no
+  API endpoint, so no certificate UI is rendered.
+
 ## Application Highlights
 
 ### Student experience

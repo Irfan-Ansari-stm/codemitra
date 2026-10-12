@@ -36,3 +36,17 @@ export const submissionRateLimiter = rateLimit({
     error: { code: 'RATE_LIMITED', message: 'Submission rate limit exceeded.' },
   },
 });
+
+// Newsletter subscription rate limit — prevents list bombing
+export const newsletterRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  keyGenerator: (req: Request) => req.ip || 'anon',
+  message: {
+    success: false,
+    error: {
+      code: 'RATE_LIMITED',
+      message: 'Too many subscription attempts. Retry after a minute.',
+    },
+  },
+});

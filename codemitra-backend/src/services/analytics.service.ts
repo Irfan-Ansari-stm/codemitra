@@ -139,11 +139,67 @@ export const analyticsService = {
     const result = await pool.query(
       `SELECT (SELECT COUNT(*)::int FROM tenants WHERE NOT is_deleted) AS "totalTenants",
               (SELECT COUNT(*)::int FROM users WHERE NOT is_deleted) AS "totalUsers",
+              (SELECT COUNT(*)::int FROM users WHERE role='institution_student' AND is_active AND NOT is_deleted) AS "totalStudents",
+              (SELECT COUNT(*)::int FROM users WHERE last_login_at >= NOW() - INTERVAL '7 days' AND NOT is_deleted) AS "activeUsers7d",
+              (SELECT COUNT(*)::int FROM users WHERE last_login_at >= CURRENT_DATE AND NOT is_deleted) AS "activeUsersToday",
               (SELECT COUNT(*)::int FROM problems WHERE NOT is_deleted) AS "totalProblems",
               (SELECT COUNT(*)::int FROM submissions) AS "totalSubmissions",
+              (SELECT COUNT(*)::int FROM submissions WHERE created_at >= NOW() - INTERVAL '7 days') AS "submissions7d",
               (SELECT COUNT(*)::int FROM submissions WHERE verdict='accepted') AS "acceptedSubmissions",
-              (SELECT COUNT(*)::int FROM courses WHERE NOT is_deleted) AS "totalCourses"`
+              (SELECT COUNT(*)::int FROM courses WHERE NOT is_deleted) AS "totalCourses",
+              (SELECT COUNT(*)::int FROM assignments WHERE NOT is_deleted) AS "totalAssignments",
+              (SELECT COUNT(*)::int FROM quizzes WHERE NOT is_deleted) AS "totalQuizzes",
+              (SELECT COUNT(*)::int FROM assignment_submissions) AS "assignmentSubmissions",
+              (SELECT COUNT(*)::int FROM quiz_attempts) AS "quizAttempts",
+              (SELECT COUNT(*)::int FROM user_progress) AS "progressRecords"`
     );
-    return result.rows[0];
+    const [institutions, recentActivity] = await Promise.all([
+      pool.query(
+        `SELECT t.id, t.name, t.slug, t.plan, t.is_active AS "isActive", t.created_at AS "createdAt",
+                COUNT(DISTINCT u.id) FILTER (WHERE u.role='institution_student' AND u.is_active AND NOT u.is_deleted)::int AS "students",
+                COUNT(DISTINCT u.id) FILTER (WHERE u.last_login_at >= NOW() - INTERVAL '7 days' AND NOT u.is_deleted)::int AS "activeUsers7d",
+                COUNT(DISTINCT c.id) FILTER (WHERE NOT c.is_deleted)::int AS "courses",
+                COUNT(DISTINCT p.id) FILTER (WHERE NOT p.is_deleted)::int AS "problems",
+                COUNT(DISTINCT s.id)::int AS "submissions",
+                MAX(s.created_at) AS "lastSubmissionAt"
+         FROM tenants t
+         LEFT JOIN users u ON u.tenant_id=t.id
+         LEFT JOIN courses c ON c.tenant_id=t.id
+         LEFT JOIN problems p ON p.tenant_id=t.id
+         LEFT JOIN submissions s ON s.tenant_id=t.id
+         WHERE NOT t.is_deleted
+         GROUP BY t.id ORDER BY MAX(s.created_at) DESC NULLS LAST, t.name ASC LIMIT 50`
+      ),
+      pool.query(
+        `SELECT s.id, 'code_submission' AS type, s.verdict::text AS status, s.created_at AS "occurredAt",
+                u.id AS "studentId", u.name AS "studentName", u.email AS "studentEmail",
+                t.id AS "institutionId", t.name AS "institutionName", p.title AS "itemTitle"
+         FROM submissions s JOIN users u ON u.id=s.user_id
+         LEFT JOIN tenants t ON t.id=s.tenant_id JOIN problems p ON p.id=s.problem_id
+         UNION ALL
+         SELECT aas.id, 'assignment_submission' AS type, aas.status::text AS status, aas.updated_at AS "occurredAt",
+                u.id AS "studentId", u.name AS "studentName", u.email AS "studentEmail",
+                t.id AS "institutionId", t.name AS "institutionName", a.title AS "itemTitle"
+         FROM assignment_submissions aas JOIN users u ON u.id=aas.student_id
+         JOIN tenants t ON t.id=aas.tenant_id JOIN assignments a ON a.id=aas.assignment_id
+         UNION ALL
+         SELECT qa.id, 'quiz_attempt' AS type, qa.status::text AS status, COALESCE(qa.completed_at, qa.started_at, qa.created_at) AS "occurredAt",
+                u.id AS "studentId", u.name AS "studentName", u.email AS "studentEmail",
+                t.id AS "institutionId", t.name AS "institutionName", q.title AS "itemTitle"
+         FROM quiz_attempts qa JOIN users u ON u.id=qa.student_id
+         JOIN tenants t ON t.id=qa.tenant_id JOIN quizzes q ON q.id=qa.quiz_id
+         UNION ALL
+         SELECT up.id, 'course_progress' AS type, CONCAT(up.completion_percent, '% complete') AS status,
+                COALESCE(up.last_accessed_at, up.updated_at) AS "occurredAt",
+                u.id AS "studentId", u.name AS "studentName", u.email AS "studentEmail",
+                t.id AS "institutionId", t.name AS "institutionName", CONCAT(c.title, ' · ', ch.title) AS "itemTitle"
+         FROM user_progress up JOIN users u ON u.id=up.user_id
+         JOIN tenants t ON t.id=up.tenant_id JOIN chapters ch ON ch.id=up.chapter_id
+         JOIN modules m ON m.id=ch.module_id JOIN courses c ON c.id=m.course_id
+         WHERE up.last_accessed_at IS NOT NULL
+         ORDER BY "occurredAt" DESC NULLS LAST LIMIT 50`
+      ),
+    ]);
+    return { ...result.rows[0], institutions: institutions.rows, recentActivity: recentActivity.rows };
   },
 };

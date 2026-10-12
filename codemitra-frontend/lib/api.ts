@@ -1,6 +1,25 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosError } from 'axios';
-import { ApiResponse } from '@/types';
+import {
+  ApiResponse,
+  Problem,
+  BlogPost,
+  BlogListParams,
+  BlogListResponse,
+  BlogPostDetailResponse,
+  BlogCategory,
+  BlogTag,
+  NewsletterSubscription,
+  Course,
+  CourseDetail,
+  CourseListParams,
+  CourseStats,
+  CourseProgressSummary,
+  ChapterProgress,
+  EnrollmentRecord,
+  EnrolledCourse,
+} from '@/types';
 import { useAuthStore } from '@/store/authStore';
+import { camelCaseKeys } from '@/lib/case';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
 
@@ -22,19 +41,6 @@ export const api: AxiosInstance = axios.create({
     'Content-Type': 'application/json',
   },
 });
-
-function camelCaseKeys(value: any): any {
-  if (Array.isArray(value)) return value.map(camelCaseKeys);
-  if (value && typeof value === 'object' && !(value instanceof Date)) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, nested]) => [
-        key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()),
-        camelCaseKeys(nested),
-      ])
-    );
-  }
-  return value;
-}
 
 // PostgreSQL returns snake_case column names; frontend models use camelCase.
 api.interceptors.response.use((response) => {
@@ -128,6 +134,9 @@ export const authApi = {
 
 // ── TENANT API ──
 export const tenantApi = {
+  current: () =>
+    api.get<ApiResponse<{ id: string; name: string; slug: string }>>('/tenants/me'),
+
   list: (page = 1, limit = 20) =>
     api.get<ApiResponse<any[]>>(`/tenants?page=${page}&limit=${limit}`),
 
@@ -147,9 +156,15 @@ export const tenantApi = {
 };
 
 // ── USER API ──
+export interface UserListApiResponse {
+  success: boolean;
+  data: Array<Record<string, unknown>>;
+  total: number;
+}
+
 export const userApi = {
   list: (params?: any) =>
-    api.get<ApiResponse<any[]>>('/users', { params }),
+    api.get<UserListApiResponse>('/users', { params }),
 
   get: (id: string) =>
     api.get<ApiResponse<any>>(`/users/${id}`),
@@ -167,15 +182,63 @@ export const userApi = {
 
   resetPassword: (id: string, newPassword: string) =>
     api.post(`/users/${id}/reset-password`, { newPassword }),
+
+  delete: (id: string) =>
+    api.delete<ApiResponse<{ message: string }>>(`/users/${id}`),
 };
 
 // ── COURSE API ──
-export const courseApi = {
-  list: (params?: any) =>
-    api.get<ApiResponse<any[]>>('/courses', { params }),
+export interface CourseListApiResponse {
+  success: boolean;
+  data: Course[];
+  meta?: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
 
-  get: (id: string) =>
-    api.get<ApiResponse<any>>(`/courses/${id}`),
+export const courseApi = {
+  /**
+   * Catalog listing. Pass `limit` for server-side pagination
+   * (response includes `meta`); omit it to receive every course.
+   */
+  list: (params?: CourseListParams) =>
+    api.get<CourseListApiResponse>('/courses', { params }),
+
+  manage: (params?: CourseListParams) =>
+    api.get<CourseListApiResponse>('/courses/manage', { params }),
+
+  get: (id: string) => api.get<ApiResponse<CourseDetail>>(`/courses/${id}`),
+
+  featured: (limit = 3) =>
+    api.get<ApiResponse<Course[]>>('/courses/featured', {
+      params: { limit },
+    }),
+
+  stats: () => api.get<ApiResponse<CourseStats>>('/courses/stats'),
+
+  myCourses: () => api.get<ApiResponse<EnrolledCourse[]>>('/courses/my-courses'),
+
+  getEnrollment: (courseId: string) =>
+    api.get<ApiResponse<EnrollmentRecord | null>>(
+      `/courses/${courseId}/enrollment`
+    ),
+
+  enroll: (courseId: string) =>
+    api.post<ApiResponse<EnrollmentRecord>>(`/courses/${courseId}/enroll`),
+
+  getProgress: (courseId: string) =>
+    api.get<ApiResponse<CourseProgressSummary>>(
+      `/courses/${courseId}/progress`
+    ),
+
+  updateChapterProgress: (courseId: string, chapterId: string, isCompleted: boolean) =>
+    api.post<ApiResponse<ChapterProgress>>(`/courses/${courseId}/progress`, {
+      chapterId,
+      isCompleted,
+    }),
 
   create: (data: any) =>
     api.post<ApiResponse<any>>('/courses', data),
@@ -220,9 +283,35 @@ export const courseApi = {
 };
 
 // ── PROBLEM API ──
+export interface ProblemListParams {
+  scope?: 'public' | 'institution' | 'all';
+  difficulty?: string;
+  tags?: string[];
+  search?: string;
+  status?: 'solved' | 'unsolved';
+  bookmarked?: boolean;
+  sort?: string;
+  order?: 'asc' | 'desc';
+  page?: number;
+  limit?: number;
+}
+
+interface ProblemListApiResponse {
+  success: true;
+  data: Problem[];
+  total: number;
+}
+
 export const problemApi = {
-  list: (params?: any) =>
-    api.get<ApiResponse<any[]>>('/problems', { params }),
+  // The backend expects `tags` as a comma-separated string and
+  // validates it with z.string(); Axios would otherwise serialize
+  // the array as repeated `tags[]=` keys, which the schema rejects.
+  list: (params?: ProblemListParams) =>
+    api.get<ProblemListApiResponse>('/problems', {
+      params: params
+        ? { ...params, tags: params.tags?.join(',') }
+        : params,
+    }),
 
   get: (id: string) =>
     api.get<ApiResponse<any>>(`/problems/${id}`),
@@ -244,6 +333,18 @@ export const problemApi = {
 
   getStats: (problemId: string) =>
     api.get(`/problems/${problemId}/stats`),
+
+  bookmarks: (params?: { page?: number; limit?: number }) =>
+    api.get<ProblemListApiResponse>('/problems/bookmarks', { params }),
+
+  checkBookmark: (problemId: string) =>
+    api.get<ApiResponse<{ bookmarked: boolean }>>(`/problems/${problemId}/bookmark`),
+
+  addBookmark: (problemId: string) =>
+    api.put<ApiResponse<{ bookmarked: boolean }>>(`/problems/${problemId}/bookmark`),
+
+  removeBookmark: (problemId: string) =>
+    api.delete<ApiResponse<{ bookmarked: boolean }>>(`/problems/${problemId}/bookmark`),
 
   updateTestCase: (testCaseId: string, data: any) => api.patch(`/test-cases/${testCaseId}`, data),
   deleteTestCase: (testCaseId: string) => api.delete(`/test-cases/${testCaseId}`),
@@ -349,27 +450,64 @@ export const analyticsApi = {
 
 // ── BLOG API ──
 export const blogApi = {
-  list: (params?: any) =>
-    api.get<ApiResponse<any[]>>('/blog', { params }),
+  list: (params?: BlogListParams) =>
+    api.get<BlogListResponse>('/blog', { params }),
 
   getBySlug: (slug: string) =>
-    api.get<ApiResponse<any>>(`/blog/slug/${slug}`),
+    api.get<BlogPostDetailResponse>(`/blog/slug/${slug}`),
 
   get: (id: string) =>
-    api.get<ApiResponse<any>>(`/blog/${id}`),
+    api.get<ApiResponse<BlogPost>>(`/blog/${id}`),
 
-  create: (data: any) =>
-    api.post<ApiResponse<any>>('/blog', data),
+  featured: () =>
+    api.get<ApiResponse<BlogPost | null>>('/blog/featured'),
 
-  update: (id: string, data: any) =>
-    api.patch<ApiResponse<any>>(`/blog/${id}`, data),
-
-  delete: (id: string) =>
-    api.delete(`/blog/${id}`),
+  related: (slug: string, limit = 3) =>
+    api.get<ApiResponse<BlogPost[]>>(`/blog/related/${slug}`, {
+      params: { limit },
+    }),
 
   categories: () =>
-    api.get<ApiResponse<any[]>>('/blog/categories'),
+    api.get<ApiResponse<BlogCategory[]>>('/blog/categories'),
 
+  tags: () =>
+    api.get<ApiResponse<BlogTag[]>>('/blog/tags'),
+
+  bookmarks: (params?: { page?: number; limit?: number }) =>
+    api.get<BlogListResponse>('/blog/bookmarks', { params }),
+
+  checkBookmark: (postId: string) =>
+    api.get<ApiResponse<{ bookmarked: boolean }>>(`/blog/${postId}/bookmark`),
+
+  addBookmark: (postId: string) =>
+    api.put<ApiResponse<{ bookmarked: boolean }>>(`/blog/${postId}/bookmark`),
+
+  removeBookmark: (postId: string) =>
+    api.delete<ApiResponse<{ bookmarked: boolean }>>(`/blog/${postId}/bookmark`),
+
+  create: (data: any) =>
+    api.post<ApiResponse<BlogPost>>('/blog', data),
+
+  update: (id: string, data: any) =>
+    api.patch<ApiResponse<BlogPost>>(`/blog/${id}`, data),
+
+  delete: (id: string) =>
+    api.delete<ApiResponse<{ message: string }>>(`/blog/${id}`),
+};
+
+// ── NEWSLETTER API ──
+export const newsletterApi = {
+  subscribe: (email: string, name?: string) =>
+    api.post<ApiResponse<NewsletterSubscription>>('/newsletter/subscribe', {
+      email,
+      name,
+    }),
+
+  unsubscribe: (email: string) =>
+    api.post<ApiResponse<NewsletterSubscription | { message: string }>>(
+      '/newsletter/unsubscribe',
+      { email }
+    ),
 };
 
 // ── NOTIFICATION API ──

@@ -26,7 +26,7 @@ export const userService = {
 
     const where = conditions.join(' AND ');
     const result = await pool.query(
-      `SELECT u.id, u.name, u.email, u.role, u.is_active, u.is_email_verified,
+      `SELECT u.id, u.tenant_id, u.name, u.email, u.role, u.is_active, u.is_email_verified,
               u.last_login_at, u.created_at, u.avatar_url, u.metadata
        FROM users u WHERE ${where}
        ORDER BY u.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
@@ -39,7 +39,7 @@ export const userService = {
     return { data: result.rows, total: parseInt(count.rows[0].count) };
   },
 
-  async getById(id: string, tenantId?: string | null) {
+  async getById(id: string, tenantId?: string | null, studentsOnly = false) {
     const result = await pool.query(
       `SELECT u.id, u.name, u.email, u.role, u.tenant_id, u.is_active, u.is_email_verified,
               u.avatar_url, u.phone, u.bio, u.metadata, u.last_login_at, u.created_at,
@@ -51,38 +51,43 @@ export const userService = {
               COALESCE(us.total_score, 0) AS total_score
        FROM users u LEFT JOIN user_stats us ON us.user_id = u.id
        WHERE u.id = $1 AND u.is_deleted = FALSE
-         AND ($2::uuid IS NULL OR u.tenant_id = $2) LIMIT 1`,
-      [id, tenantId || null]
+         AND ($2::uuid IS NULL OR u.tenant_id = $2)
+         AND ($3::boolean = FALSE OR u.role = 'institution_student') LIMIT 1`,
+      [id, tenantId || null, studentsOnly]
     );
     if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'User not found');
     return result.rows[0];
   },
 
   async createInstitutionUser(data: {
-    tenantId: string;
+    tenantId: string | null;
     email: string;
     password: string;
     name: string;
-    role: 'institution_admin' | 'institution_student';
+    role: 'institution_admin' | 'institution_student' | 'general_student';
+    phone?: string;
+    bio?: string;
     metadata?: Record<string, any>;
   }) {
     const passwordHash = await bcrypt.hash(data.password, BCRYPT_ROUNDS);
     const result = await pool.query(
-      `INSERT INTO users (tenant_id, email, password_hash, name, role, is_email_verified, metadata)
-       VALUES ($1, $2, $3, $4, $5, TRUE, $6) RETURNING id, email, name, role`,
+      `INSERT INTO users (tenant_id, email, password_hash, name, role, phone, bio, is_email_verified, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, $8) RETURNING id, tenant_id, email, name, role, phone, bio, is_active, is_email_verified, created_at`,
       [
         data.tenantId,
         data.email.toLowerCase(),
         passwordHash,
         data.name,
         data.role,
+        data.phone || null,
+        data.bio || null,
         JSON.stringify(data.metadata || {}),
       ]
     );
     return result.rows[0];
   },
 
-  async update(id: string, data: Record<string, any>) {
+  async update(id: string, data: Record<string, any>, tenantId?: string | null, studentsOnly = false) {
     const mapped = { ...data };
     if ('avatarUrl' in mapped) mapped.avatar_url = mapped.avatarUrl;
     if ('isActive' in mapped) mapped.is_active = mapped.isActive;
@@ -93,30 +98,40 @@ export const userService = {
     const sets = fields.map((f, i) => `${f} = $${i + 2}`).join(', ');
     const values = fields.map((f) => (f === 'metadata' ? JSON.stringify(mapped[f]) : mapped[f]));
 
+    const tenantFilter = tenantId ? ` AND tenant_id = $${values.length + 2}` : '';
+    const studentFilter = studentsOnly ? ` AND role = 'institution_student'` : '';
     const result = await pool.query(
       `UPDATE users SET ${sets}, updated_at = NOW()
-       WHERE id = $1 AND is_deleted = FALSE RETURNING id, name, email, role, avatar_url`,
-      [id, ...values]
+       WHERE id = $1 AND is_deleted = FALSE${tenantFilter}${studentFilter}
+       RETURNING id, name, email, role, is_active, avatar_url, phone, bio, metadata`,
+      tenantId ? [id, ...values, tenantId] : [id, ...values]
     );
     if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'User not found');
     return result.rows[0];
   },
 
-  async resetPassword(id: string, tenantId: string, newPassword: string) {
+  async resetPassword(id: string, tenantId: string | undefined, newPassword: string, studentsOnly = false) {
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    const tenantFilter = tenantId ? ' AND tenant_id = $3' : '';
+    const roleFilter = studentsOnly ? " AND role = 'institution_student'" : " AND role <> 'super_admin'";
     const result = await pool.query(
       `UPDATE users SET password_hash = $1, login_attempt_count = 0, locked_until = NULL, updated_at = NOW()
-       WHERE id = $2 AND tenant_id = $3 AND role = 'institution_student' AND NOT is_deleted
-       RETURNING id`, [passwordHash, id, tenantId]
+       WHERE id = $2${tenantFilter}${roleFilter} AND NOT is_deleted
+       RETURNING id`, tenantId ? [passwordHash, id, tenantId] : [passwordHash, id]
     );
     if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Student not found');
   },
 
-  async softDelete(id: string) {
-    await pool.query(
-      'UPDATE users SET is_deleted = TRUE, updated_at = NOW() WHERE id = $1',
-      [id]
+  async softDelete(id: string, tenantId?: string | null, studentsOnly = false) {
+    const tenantFilter = tenantId ? ' AND tenant_id = $2' : '';
+    const studentFilter = studentsOnly ? ` AND role = 'institution_student'` : '';
+    const result = await pool.query(
+      `UPDATE users SET is_deleted = TRUE, updated_at = NOW()
+       WHERE id = $1 AND is_deleted = FALSE${tenantFilter}${studentFilter}
+       RETURNING id`,
+      tenantId ? [id, tenantId] : [id]
     );
+    if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Student not found');
   },
 
   async getProfile(userId: string) {

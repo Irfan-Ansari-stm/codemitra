@@ -3,11 +3,24 @@ import { tenantService } from '../services/tenant.service';
 import { requireAuth } from '../middleware/auth';
 import { isSuperAdmin } from '../middleware/rbac';
 import { validate } from '../middleware/validate';
-import { createTenantSchema, paginationSchema } from '../validators';
+import { createTenantSchema, paginationSchema, updateTenantSchema } from '../validators';
 import { writeAuditLog } from '../utils/audit';
 
 export const tenantRouter = Router();
-tenantRouter.use(requireAuth, isSuperAdmin);
+tenantRouter.use(requireAuth);
+
+tenantRouter.get('/me', async (req, res, next) => {
+  try {
+    if (!req.user!.tenantId || !['institution_admin', 'institution_student'].includes(req.user!.role)) {
+      res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Institution not found' } });
+      return;
+    }
+    const tenant = await tenantService.getById(req.user!.tenantId);
+    res.json({ success: true, data: { id: tenant.id, name: tenant.name, slug: tenant.slug } });
+  } catch (err) { next(err); }
+});
+
+tenantRouter.use(isSuperAdmin);
 
 tenantRouter.get('/slug/:slug', async (req, res, next) => {
   try {
@@ -70,7 +83,7 @@ tenantRouter.post('/', validate(createTenantSchema), async (req, res, next) => {
 });
 
 // PATCH /api/v1/tenants/:id
-tenantRouter.patch('/:id', async (req, res, next) => {
+tenantRouter.patch('/:id', validate(updateTenantSchema), async (req, res, next) => {
   try {
     const tenant = await tenantService.update(req.params.id, req.body);
     await writeAuditLog({

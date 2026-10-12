@@ -11,6 +11,7 @@ import {
   date,
   jsonb,
   bigserial,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 
@@ -150,7 +151,7 @@ export const refreshTokens = pgTable('refresh_tokens', {
 
 export const courses = pgTable('courses', {
   id: uuid('id').primaryKey().defaultRandom(),
-  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'restrict' }),
   createdBy: uuid('created_by').notNull().references(() => users.id, { onDelete: 'restrict' }),
   title: varchar('title', { length: 255 }).notNull(),
   description: text('description'),
@@ -166,7 +167,7 @@ export const courses = pgTable('courses', {
 export const modules = pgTable('modules', {
   id: uuid('id').primaryKey().defaultRandom(),
   courseId: uuid('course_id').notNull().references(() => courses.id, { onDelete: 'cascade' }),
-  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'restrict' }),
   title: varchar('title', { length: 255 }).notNull(),
   description: text('description'),
   orderIndex: integer('order_index').notNull().default(0),
@@ -179,7 +180,7 @@ export const modules = pgTable('modules', {
 export const chapters = pgTable('chapters', {
   id: uuid('id').primaryKey().defaultRandom(),
   moduleId: uuid('module_id').notNull().references(() => modules.id, { onDelete: 'cascade' }),
-  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'restrict' }),
   title: varchar('title', { length: 255 }).notNull(),
   content: text('content'),
   orderIndex: integer('order_index').notNull().default(0),
@@ -230,6 +231,24 @@ export const testCases = pgTable('test_cases', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const problemBookmarks = pgTable(
+  'problem_bookmarks',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    problemId: uuid('problem_id')
+      .notNull()
+      .references(() => problems.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.userId, table.problemId] }),
+  })
+);
 
 export const assignments = pgTable('assignments', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -349,7 +368,7 @@ export const userProgress = pgTable('user_progress', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   chapterId: uuid('chapter_id').notNull().references(() => chapters.id, { onDelete: 'cascade' }),
-  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'restrict' }),
   isCompleted: boolean('is_completed').notNull().default(false),
   completionPercent: numeric('completion_percent', { precision: 5, scale: 2 }).notNull().default('0'),
   problemsSolved: integer('problems_solved').notNull().default(0),
@@ -387,6 +406,33 @@ export const blogPosts = pgTable('blog_posts', {
   seoDescription: varchar('seo_description', { length: 160 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const blogBookmarks = pgTable(
+  'blog_bookmarks',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    postId: uuid('post_id')
+      .notNull()
+      .references(() => blogPosts.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.userId, table.postId] }),
+  })
+);
+
+export const newsletterSubscribers = pgTable('newsletter_subscribers', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: text('email').notNull().unique(),
+  name: varchar('name', { length: 255 }),
+  subscribedAt: timestamp('subscribed_at', { withTimezone: true }).notNull().defaultNow(),
+  unsubscribedAt: timestamp('unsubscribed_at', { withTimezone: true }),
+  metadata: jsonb('metadata').notNull().default({}),
 });
 
 export const announcements = pgTable('announcements', {
@@ -554,5 +600,8 @@ export type QuizQuestion = typeof quizQuestions.$inferSelect;
 export type QuizAttempt = typeof quizAttempts.$inferSelect;
 export type UserProgress = typeof userProgress.$inferSelect;
 export type BlogPost = typeof blogPosts.$inferSelect;
+export type BlogCategory = typeof blogCategories.$inferSelect;
+export type BlogBookmark = typeof blogBookmarks.$inferSelect;
+export type NewsletterSubscriber = typeof newsletterSubscribers.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type UserStats = typeof userStats.$inferSelect;

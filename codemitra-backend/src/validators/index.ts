@@ -26,8 +26,8 @@ export const changePasswordSchema = z.object({
 
 // ── Tenant ────────────────────────────────────────────────────────────────────
 export const createTenantSchema = z.object({
-  name: z.string().min(2).max(255),
-  slug: z.string().min(2).max(100).optional(),
+  name: z.string().min(2).max(255).trim(),
+  slug: z.string().min(2).max(100).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).optional(),
   plan: z.enum(['trial', 'basic', 'pro', 'enterprise']).optional(),
   maxStudents: z.number().int().positive().optional(),
   adminEmail: z.string().email().optional(),
@@ -38,19 +38,27 @@ export const createTenantSchema = z.object({
   address: z.string().max(500).optional(),
 });
 
+export const updateTenantSchema = createTenantSchema.partial().omit({
+  adminEmail: true,
+  adminName: true,
+}).extend({ isActive: z.boolean().optional() });
+
 // ── User ─────────────────────────────────────────────────────────────────────
 export const createUserSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).max(128),
-  name: z.string().min(2).max(255),
-  role: z.enum(['institution_admin', 'institution_student']),
+  name: z.string().min(2).max(255).trim(),
+  role: z.enum(['institution_admin', 'institution_student', 'general_student']),
+  tenantId: z.string().uuid().nullable().optional(),
+  phone: z.string().max(30).optional(),
+  bio: z.string().max(1000).optional(),
   metadata: z.record(z.any()).optional(),
 });
 
 export const updateUserSchema = z.object({
   name: z.string().min(2).max(255).optional(),
-  phone: z.string().max(30).optional(),
-  bio: z.string().max(1000).optional(),
+  phone: z.string().max(30).nullable().optional(),
+  bio: z.string().max(1000).nullable().optional(),
   avatarUrl: z.string().url().optional(),
   metadata: z.record(z.any()).optional(),
   isActive: z.boolean().optional(),
@@ -58,6 +66,7 @@ export const updateUserSchema = z.object({
 
 // ── Course ────────────────────────────────────────────────────────────────────
 export const createCourseSchema = z.object({
+  tenantId: z.string().uuid().nullable().optional(),
   title: z.string().min(2).max(255),
   description: z.string().max(2000).optional(),
   thumbnailUrl: z.string().url().optional(),
@@ -82,6 +91,7 @@ export const createChapterSchema = z.object({
 
 // ── Problem ───────────────────────────────────────────────────────────────────
 export const createProblemSchema = z.object({
+  tenantId: z.string().uuid().nullable().optional(),
   title: z.string().min(2).max(255),
   slug: z.string().min(1).max(300).optional(),
   statement: z.string().min(10),
@@ -104,6 +114,10 @@ export const createProblemSchema = z.object({
     orderIndex: z.number().int().min(0).optional(),
     explanation: z.string().optional(),
   })).optional(),
+});
+
+export const updateProblemSchema = createProblemSchema.partial().omit({
+  testCases: true,
 });
 
 export const createTestCaseSchema = z.object({
@@ -188,6 +202,31 @@ export const submitQuizSchema = z.object({
   answers: z.record(z.array(z.string())),
 });
 
+// ── Pagination ────────────────────────────────────────────────
+export const paginationSchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(20),
+  search: z.string().max(255).optional(),
+});
+
+export const userListQuerySchema = paginationSchema.extend({
+  role: z.enum(['super_admin', 'institution_admin', 'institution_student', 'general_student']).optional(),
+});
+
+// ── Course list query ──────────────────────────────────────────────
+export const courseQuerySchema = paginationSchema.extend({
+  language: z.string().max(100).optional(),
+  status: z.enum(['draft', 'published', 'archived']).optional(),
+  sort: z.enum(['newest', 'oldest', 'title', 'popular']).optional(),
+  order: z.enum(['asc', 'desc']).optional(),
+});
+
+// ── Chapter progress ───────────────────────────────────────────────
+export const chapterProgressSchema = z.object({
+  chapterId: z.string().uuid(),
+  isCompleted: z.boolean(),
+});
+
 // ── Blog ──────────────────────────────────────────────────────────────────────
 export const createBlogPostSchema = z.object({
   title: z.string().min(2).max(500),
@@ -204,9 +243,32 @@ export const createBlogPostSchema = z.object({
   readTimeMinutes: z.number().int().positive().optional(),
 });
 
-// ── Pagination ────────────────────────────────────────────────────────────────
-export const paginationSchema = z.object({
-  page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().positive().max(100).default(20),
-  search: z.string().max(255).optional(),
+export const blogQuerySchema = paginationSchema.extend({
+  category: z.string().max(120).optional(),
+  tag: z.string().max(100).optional(),
+  sort: z.enum(['newest', 'oldest', 'updated', 'popular', 'title']).optional(),
+  featured: z
+    .enum(['true', 'false'])
+    .transform((value) => value === 'true')
+    .optional(),
+});
+
+// ── Newsletter ────────────────────────────────────────────────────────────────
+export const newsletterSubscribeSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(1).max(255).optional(),
+});
+
+// ── Problem list query ────────────────────────────────────────────────────────
+export const problemQuerySchema = paginationSchema.extend({
+    scope: z.enum(['public', 'institution', 'all']).optional(),
+    difficulty: z.enum(['easy', 'medium', 'hard']).optional(),
+    search: z.string().trim().max(200).optional(),
+  tags: z.string().max(500).optional(),
+  status: z.enum(['solved', 'unsolved']).optional(),
+  bookmarked: z.coerce.boolean().optional(),
+  sort: z
+    .enum(['created_at', 'title', 'difficulty', 'acceptance_rate', 'total_submissions'])
+    .optional(),
+  order: z.enum(['asc', 'desc']).optional(),
 });

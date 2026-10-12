@@ -37,8 +37,8 @@ export default function PlatformDashboardPage() {
     </section>
     <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 sm:p-6">
       <div><h3 className="text-sm font-semibold text-slate-900 dark:text-white">Administration</h3><p className="mt-1 text-xs text-slate-500">Manage platform entities and review operational data.</p></div>
-      <div className="mt-4 grid gap-2 sm:grid-cols-3">{[
-        ['Institutions', '/super-admin/institutions', Building2], ['Users', '/super-admin/users', Users], ['Platform analytics', '/super-admin/analytics', Code2],
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{[
+        ['Institutions', '/super-admin/institutions', Building2], ['General users', '/super-admin/general-users', Users], ['Institution users', '/super-admin/users', Users], ['Courses', '/super-admin/courses', FileCode2], ['Problems', '/super-admin/problems', Code2], ['Platform analytics', '/super-admin/analytics', Code2],
       ].map(([label, href, Icon]) => <Link key={String(href)} href={String(href)} className="flex items-center gap-3 rounded-lg border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:bg-blue-50/50 dark:border-slate-800 dark:text-slate-300 dark:hover:border-blue-800 dark:hover:bg-blue-950/20"><Icon size={17} className="text-slate-400" />{String(label)}<ArrowRight size={14} className="ml-auto text-slate-400" /></Link>)}</div>
     </section>
   </div>;

@@ -123,8 +123,8 @@ src/
 ### Courses — `/api/v1/courses`
 | Method | Path | Description |
 |---|---|---|
-| GET | `/` | List courses in tenant |
-| GET | `/:id` | Get course |
+| GET | `/` | List tenant courses; tenantless general students see published courses |
+| GET | `/:id` | Get tenant course or published course for a general student |
 | POST | `/` | Create course (admin) |
 | PATCH | `/:id` | Update course (admin) |
 | GET | `/:courseId/modules` | List modules |

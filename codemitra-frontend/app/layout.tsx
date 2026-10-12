@@ -56,6 +56,12 @@ export default function RootLayout({ children }: RootLayoutProps) {
         <meta charSet="utf-8" />
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var t=localStorage.getItem('theme');if(t==='dark'){document.documentElement.classList.add('dark')}}catch(e){}})();",
+          }}
+        />
       </head>
       <body className="antialiased">
         <Providers>{children}</Providers>

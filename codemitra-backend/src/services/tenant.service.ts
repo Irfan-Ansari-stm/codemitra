@@ -68,7 +68,7 @@ export const tenantService = {
     for (const [from, to] of Object.entries({ maxStudents: 'max_students', isActive: 'is_active', contactEmail: 'contact_email', contactPhone: 'contact_phone', websiteUrl: 'website_url', planExpiresAt: 'plan_expires_at' })) {
       if (from in mapped) mapped[to] = mapped[from];
     }
-    const allowed = ['name', 'plan', 'max_students', 'contact_email', 'contact_phone', 'website_url', 'address', 'is_active', 'plan_expires_at', 'settings'];
+    const allowed = ['name', 'slug', 'plan', 'max_students', 'contact_email', 'contact_phone', 'website_url', 'address', 'is_active', 'plan_expires_at', 'settings'];
     const fields = Object.keys(mapped).filter((k) => allowed.includes(k));
     if (fields.length === 0) throw new AppError(400, 'NO_FIELDS', 'No valid fields to update');
 
@@ -84,9 +84,10 @@ export const tenantService = {
   },
 
   async softDelete(id: string) {
-    await pool.query(
-      'UPDATE tenants SET is_deleted = TRUE, updated_at = NOW() WHERE id = $1',
+    const result = await pool.query(
+      'UPDATE tenants SET is_deleted = TRUE, updated_at = NOW() WHERE id = $1 AND is_deleted = FALSE RETURNING id',
       [id]
     );
+    if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Institution not found');
   },
 };
