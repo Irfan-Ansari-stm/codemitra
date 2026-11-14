@@ -15,6 +15,29 @@ export interface AuthUser {
   isEmailVerified?: boolean;
 }
 
+export interface RoleItem {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  isSystem: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+  userCount?: number;
+  permissionCount?: number;
+  permissions?: PermissionItem[];
+}
+
+export interface PermissionItem {
+  id: string;
+  name: string;
+  slug: string;
+  module: string;
+  action: string;
+  description?: string | null;
+}
+
 export interface AuthResponse {
   accessToken: string;
   refreshToken?: string;

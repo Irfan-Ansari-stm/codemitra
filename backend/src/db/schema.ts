@@ -12,6 +12,7 @@ import {
   jsonb,
   bigserial,
   primaryKey,
+  doublePrecision,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 
@@ -147,6 +148,43 @@ export const refreshTokens = pgTable('refresh_tokens', {
   userAgent: text('user_agent'),
   isRevoked: boolean('is_revoked').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const roles = pgTable('roles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: varchar('name', { length: 100 }).notNull(),
+  slug: varchar('slug', { length: 100 }).notNull().unique(),
+  description: text('description'),
+  isSystem: boolean('is_system').notNull().default(false),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const permissions = pgTable('permissions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: varchar('name', { length: 100 }).notNull(),
+  slug: varchar('slug', { length: 100 }).notNull().unique(),
+  module: varchar('module', { length: 50 }).notNull(),
+  action: varchar('action', { length: 50 }).notNull(),
+  description: text('description'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const rolePermissions = pgTable('role_permissions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  roleId: uuid('role_id').notNull().references(() => roles.id, { onDelete: 'cascade' }),
+  permissionId: uuid('permission_id').notNull().references(() => permissions.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const userRoles = pgTable('user_roles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  roleId: uuid('role_id').notNull().references(() => roles.id, { onDelete: 'cascade' }),
+  assignedBy: uuid('assigned_by').references(() => users.id, { onDelete: 'set null' }),
+  assignedAt: timestamp('assigned_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const courses = pgTable('courses', {
@@ -701,6 +739,148 @@ export const quizzesRelations = relations(quizzes, ({ one, many }) => ({
   attempts: many(quizAttempts),
 }));
 
+export const instituteApplications = pgTable('institute_applications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  applicationNumber: varchar('application_number', { length: 50 }),
+  applicantUserId: uuid('applicant_user_id').references(() => users.id, { onDelete: 'set null' }),
+  institutionName: varchar('institution_name', { length: 255 }).notNull(),
+  slug: varchar('slug', { length: 255 }).notNull(),
+  contactEmail: varchar('contact_email', { length: 255 }).notNull(),
+  contactPhone: varchar('contact_phone', { length: 50 }),
+  contactPerson: varchar('contact_person', { length: 255 }),
+  city: varchar('city', { length: 100 }),
+  state: varchar('state', { length: 100 }),
+  country: varchar('country', { length: 100 }).default('India'),
+  establishedYear: integer('established_year'),
+  institutionType: varchar('institution_type', { length: 100 }).default('University'),
+  websiteUrl: text('website_url'),
+  address: text('address'),
+  description: text('description'),
+  documents: jsonb('documents').default(sql`'[]'::jsonb`),
+  status: varchar('status', { length: 50 }).notNull().default('pending'),
+  reviewNote: text('review_note'),
+  rejectionReason: text('rejection_reason'),
+  adminNotes: text('admin_notes'),
+  reviewedBy: uuid('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const instituteApplicationsRelations = relations(instituteApplications, ({ one }) => ({
+  applicant: one(users, { fields: [instituteApplications.applicantUserId], references: [users.id] }),
+  reviewer: one(users, { fields: [instituteApplications.reviewedBy], references: [users.id] }),
+  tenant: one(tenants, { fields: [instituteApplications.tenantId], references: [tenants.id] }),
+}));
+
+export const admissions = pgTable('admissions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  applicationNumber: varchar('application_number', { length: 50 }).unique(),
+  studentId: uuid('student_id').references(() => users.id, { onDelete: 'set null' }),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  courseId: uuid('course_id').references(() => courses.id, { onDelete: 'set null' }),
+  batchId: uuid('batch_id'),
+  fullName: varchar('full_name', { length: 255 }).notNull(),
+  email: varchar('email', { length: 255 }).notNull(),
+  phone: varchar('phone', { length: 50 }),
+  program: varchar('program', { length: 255 }).notNull(),
+  academicDetails: jsonb('academic_details').default(sql`'{}'::jsonb`),
+  documents: jsonb('documents').default(sql`'[]'::jsonb`),
+  status: varchar('status', { length: 50 }).notNull().default('pending'),
+  rejectionReason: text('rejection_reason'),
+  adminNotes: text('admin_notes'),
+  submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
+  reviewedBy: uuid('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const admissionsRelations = relations(admissions, ({ one }) => ({
+  student: one(users, { fields: [admissions.studentId], references: [users.id] }),
+  tenant: one(tenants, { fields: [admissions.tenantId], references: [tenants.id] }),
+  course: one(courses, { fields: [admissions.courseId], references: [courses.id] }),
+  reviewer: one(users, { fields: [admissions.reviewedBy], references: [users.id] }),
+}));
+
+export const courseSubmissions = pgTable('course_submissions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  submissionNumber: varchar('submission_number', { length: 50 }).unique(),
+  courseId: uuid('course_id').notNull().references(() => courses.id, { onDelete: 'cascade' }),
+  tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+  instructorId: uuid('instructor_id').references(() => users.id, { onDelete: 'set null' }),
+  submissionVersion: varchar('submission_version', { length: 50 }).notNull().default('1.0.0'),
+  title: varchar('title', { length: 255 }).notNull(),
+  category: varchar('category', { length: 100 }),
+  level: varchar('level', { length: 50 }).default('Beginner'),
+  description: text('description'),
+  syllabusSummary: text('syllabus_summary'),
+  documents: jsonb('documents').default(sql`'[]'::jsonb`),
+  status: varchar('status', { length: 50 }).notNull().default('pending'),
+  rejectionReason: text('rejection_reason'),
+  reviewComments: text('review_comments'),
+  adminNotes: text('admin_notes'),
+  submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
+  reviewedBy: uuid('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const courseSubmissionsRelations = relations(courseSubmissions, ({ one }) => ({
+  course: one(courses, { fields: [courseSubmissions.courseId], references: [courses.id] }),
+  tenant: one(tenants, { fields: [courseSubmissions.tenantId], references: [tenants.id] }),
+  instructor: one(users, { fields: [courseSubmissions.instructorId], references: [users.id] }),
+  reviewer: one(users, { fields: [courseSubmissions.reviewedBy], references: [users.id] }),
+}));
+
+export const approvalHistory = pgTable('approval_history', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  entityType: varchar('entity_type', { length: 50 }).notNull(),
+  entityId: uuid('entity_id').notNull(),
+  action: varchar('action', { length: 50 }).notNull(),
+  previousStatus: varchar('previous_status', { length: 50 }),
+  newStatus: varchar('new_status', { length: 50 }).notNull(),
+  reason: text('reason'),
+  adminNotes: text('admin_notes'),
+  performedBy: uuid('performed_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const approvalHistoryRelations = relations(approvalHistory, ({ one }) => ({
+  performer: one(users, { fields: [approvalHistory.performedBy], references: [users.id] }),
+}));
+
+export const rolesRelations = relations(roles, ({ many }) => ({
+  permissions: many(rolePermissions),
+  users: many(userRoles),
+}));
+
+export const permissionsRelations = relations(permissions, ({ many }) => ({
+  roles: many(rolePermissions),
+}));
+
+export const rolePermissionsRelations = relations(rolePermissions, ({ one }) => ({
+  role: one(roles, { fields: [rolePermissions.roleId], references: [roles.id] }),
+  permission: one(permissions, { fields: [rolePermissions.permissionId], references: [permissions.id] }),
+}));
+
+export const userRolesRelations = relations(userRoles, ({ one }) => ({
+  user: one(users, { fields: [userRoles.userId], references: [users.id] }),
+  role: one(roles, { fields: [userRoles.roleId], references: [roles.id] }),
+  assignedByUser: one(users, { fields: [userRoles.assignedBy], references: [users.id] }),
+}));
+
+export type InstituteApplication = typeof instituteApplications.$inferSelect;
+export type NewInstituteApplication = typeof instituteApplications.$inferInsert;
+export type Admission = typeof admissions.$inferSelect;
+export type NewAdmission = typeof admissions.$inferInsert;
+export type CourseSubmission = typeof courseSubmissions.$inferSelect;
+export type NewCourseSubmission = typeof courseSubmissions.$inferInsert;
+export type ApprovalHistoryRecord = typeof approvalHistory.$inferSelect;
+export type NewApprovalHistoryRecord = typeof approvalHistory.$inferInsert;
+
 // =============================================================================
 // INFERRED TYPESCRIPT TYPES
 // =============================================================================
@@ -709,6 +889,12 @@ export type Tenant = typeof tenants.$inferSelect;
 export type NewTenant = typeof tenants.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+export type Role = typeof roles.$inferSelect;
+export type NewRole = typeof roles.$inferInsert;
+export type Permission = typeof permissions.$inferSelect;
+export type NewPermission = typeof permissions.$inferInsert;
+export type RolePermission = typeof rolePermissions.$inferSelect;
+export type UserRole = typeof userRoles.$inferSelect;
 export type Course = typeof courses.$inferSelect;
 export type NewCourse = typeof courses.$inferInsert;
 export type Module = typeof modules.$inferSelect;
@@ -743,3 +929,91 @@ export type DatabaseBackup = typeof databaseBackups.$inferSelect;
 export type FeatureFlag = typeof featureFlags.$inferSelect;
 export type PlatformConfiguration = typeof platformConfigurations.$inferSelect;
 export type ApplicationLog = typeof applicationLogs.$inferSelect;
+
+// =============================================================================
+// IDE ENTITIES
+// =============================================================================
+
+export const ideProjects = pgTable('ide_projects', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  projectName: varchar('project_name', { length: 255 }).notNull(),
+  description: text('description'),
+  defaultLanguage: varchar('default_language', { length: 64 }).notNull().default('python'),
+  visibility: varchar('visibility', { length: 32 }).notNull().default('private'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const ideFiles = pgTable('ide_files', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').notNull().references(() => ideProjects.id, { onDelete: 'cascade' }),
+  fileName: varchar('file_name', { length: 255 }).notNull(),
+  filePath: varchar('file_path', { length: 512 }).notNull().default('/'),
+  language: varchar('language', { length: 64 }).notNull().default('python'),
+  sourceCode: text('source_code').notNull().default(''),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const ideOpenTabs = pgTable('ide_open_tabs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  projectId: uuid('project_id').notNull().references(() => ideProjects.id, { onDelete: 'cascade' }),
+  fileId: uuid('file_id').notNull().references(() => ideFiles.id, { onDelete: 'cascade' }),
+  tabOrder: integer('tab_order').notNull().default(0),
+  isActive: boolean('is_active').notNull().default(false),
+});
+
+export const ideExecutions = pgTable('ide_executions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+  projectId: uuid('project_id').references(() => ideProjects.id, { onDelete: 'set null' }),
+  language: varchar('language', { length: 64 }).notNull(),
+  sourceCodeSnapshot: text('source_code_snapshot').notNull(),
+  stdin: text('stdin').default(''),
+  executionEngine: varchar('execution_engine', { length: 32 }).notNull().default('auto'),
+  executionStatus: varchar('execution_status', { length: 64 }).notNull().default('completed'),
+  stdout: text('stdout').default(''),
+  stderr: text('stderr').default(''),
+  compileOutput: text('compile_output').default(''),
+  exitCode: integer('exit_code').default(0),
+  executionTime: doublePrecision('execution_time').default(0),
+  memoryUsed: integer('memory_used'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+});
+
+export const ideSettings = pgTable('ide_settings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+  editorTheme: varchar('editor_theme', { length: 32 }).notNull().default('vs-dark'),
+  fontSize: integer('font_size').notNull().default(14),
+  tabSize: integer('tab_size').notNull().default(2),
+  wordWrap: boolean('word_wrap').notNull().default(true),
+  minimapEnabled: boolean('minimap_enabled').notNull().default(false),
+  autoSaveEnabled: boolean('auto_save_enabled').notNull().default(true),
+  defaultLanguage: varchar('default_language', { length: 64 }).notNull().default('python'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const ideProjectsRelations = relations(ideProjects, ({ one, many }) => ({
+  user: one(users, { fields: [ideProjects.userId], references: [users.id] }),
+  files: many(ideFiles),
+  executions: many(ideExecutions),
+}));
+
+export const ideFilesRelations = relations(ideFiles, ({ one }) => ({
+  project: one(ideProjects, { fields: [ideFiles.projectId], references: [ideProjects.id] }),
+}));
+
+export type IdeProject = typeof ideProjects.$inferSelect;
+export type NewIdeProject = typeof ideProjects.$inferInsert;
+export type IdeFileEntity = typeof ideFiles.$inferSelect;
+export type NewIdeFileEntity = typeof ideFiles.$inferInsert;
+export type IdeExecution = typeof ideExecutions.$inferSelect;
+export type NewIdeExecution = typeof ideExecutions.$inferInsert;
+export type IdeSetting = typeof ideSettings.$inferSelect;
+export type NewIdeSetting = typeof ideSettings.$inferInsert;
+export type IdeOpenTab = typeof ideOpenTabs.$inferSelect;

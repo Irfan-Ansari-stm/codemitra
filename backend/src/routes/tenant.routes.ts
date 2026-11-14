@@ -46,8 +46,8 @@ tenantRouter.get('/:id/quota', async (req, res, next) => {
 // GET /api/v1/tenants
 tenantRouter.get('/', validate(paginationSchema, 'query'), async (req, res, next) => {
   try {
-    const { page, limit } = req.query as any;
-    const result = await tenantService.list(page, limit);
+    const { page, limit, search } = req.query as any;
+    const result = await tenantService.list(page, limit, search);
     res.json({ success: true, ...result });
   } catch (err) {
     next(err);
@@ -58,7 +58,7 @@ tenantRouter.get('/', validate(paginationSchema, 'query'), async (req, res, next
 tenantRouter.get('/:id', async (req, res, next) => {
   try {
     const tenant = await tenantService.getById(req.params.id);
-    res.json({ success: true, data: { id: tenant.id, name: tenant.name, slug: tenant.slug, plan: tenant.plan, maxStudents: tenant.max_students } });
+    res.json({ success: true, data: tenant });
   } catch (err) {
     next(err);
   }
@@ -91,6 +91,25 @@ tenantRouter.patch('/:id', validate(updateTenantSchema), async (req, res, next) 
       action: 'tenant.update',
       resourceType: 'tenant',
       resourceId: tenant.id,
+      requestId: (req as any).requestId,
+    });
+    res.json({ success: true, data: tenant });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /api/v1/tenants/:id/status
+tenantRouter.patch('/:id/status', async (req, res, next) => {
+  try {
+    const { isActive } = req.body;
+    const tenant = await tenantService.update(req.params.id, { isActive: Boolean(isActive) });
+    await writeAuditLog({
+      userId: req.user!.id,
+      action: 'tenant.status_change',
+      resourceType: 'tenant',
+      resourceId: tenant.id,
+      newData: { isActive },
       requestId: (req as any).requestId,
     });
     res.json({ success: true, data: tenant });

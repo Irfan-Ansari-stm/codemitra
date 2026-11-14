@@ -17,11 +17,28 @@ userRouter.get(
   validate(userListQuerySchema, 'query'),
   async (req, res, next) => {
     try {
-      const tenantId = req.user!.role === 'super_admin' ? undefined : req.user!.tenantId || undefined;
-      if (req.user!.role !== 'super_admin' && !tenantId) throw new AppError(400, 'TENANT_REQUIRED', 'Tenant context required');
+      const isSuper = req.user!.role === 'super_admin';
+      const tenantId = isSuper
+        ? (req.query.tenantId as string | undefined) || undefined
+        : req.user!.tenantId || undefined;
+      if (!isSuper && !tenantId) throw new AppError(400, 'TENANT_REQUIRED', 'Tenant context required');
       const { page, limit } = req.query as any;
       const role = req.query.role as string | undefined;
-      const result = await userService.list(tenantId, page, limit, role, req.query.search as string | undefined);
+      const status = req.query.status as string | undefined;
+      const verificationStatus = req.query.verificationStatus as any;
+      const standaloneOnly = req.query.standaloneOnly as any;
+      const dateFrom = req.query.dateFrom as string | undefined;
+      const dateTo = req.query.dateTo as string | undefined;
+      const sortBy = req.query.sortBy as string | undefined;
+      const sortOrder = req.query.sortOrder as 'asc' | 'desc' | undefined;
+      const result = await userService.list(
+        tenantId,
+        page,
+        limit,
+        role,
+        req.query.search as string | undefined,
+        { status, verificationStatus, standaloneOnly, dateFrom, dateTo, sortBy, sortOrder }
+      );
       res.json({ success: true, ...result });
     } catch (err) {
       next(err);
@@ -75,7 +92,8 @@ userRouter.post(
   async (req, res, next) => {
     try {
       const tenantId = req.body.tenantId ?? null;
-      if (req.body.role !== 'general_student' && !tenantId) {
+      const isInstitutionScoped = req.body.role === 'institution_admin' || req.body.role === 'institution_student';
+      if (isInstitutionScoped && !tenantId) {
         throw new AppError(400, 'TENANT_REQUIRED', 'Institution users must belong to an institution');
       }
       if (req.body.role === 'general_student' && tenantId) {
@@ -199,6 +217,50 @@ userRouter.patch('/:id', validate(updateUserSchema), async (req, res, next) => {
       isInstitutionAdminUpdatingStudent
     );
     res.json({ success: true, data: user });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /api/v1/users/:id/status — activate, deactivate, or suspend user (super admin only)
+userRouter.patch('/:id/status', isSuperAdmin, async (req, res, next) => {
+  try {
+    const { isActive, isSuspended, reason } = req.body;
+    if (typeof isActive !== 'boolean' && typeof isSuspended !== 'boolean') {
+      throw new AppError(400, 'VALIDATION_ERROR', 'isActive or isSuspended boolean is required');
+    }
+    const updated = await userService.updateStatus(
+      req.params.id,
+      isActive ?? true,
+      Boolean(isSuspended),
+      typeof reason === 'string' ? reason : undefined
+    );
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /api/v1/users/:id/role — change user's role (super admin only)
+userRouter.patch('/:id/role', isSuperAdmin, async (req, res, next) => {
+  try {
+    const { role } = req.body;
+    if (!role || typeof role !== 'string') {
+      throw new AppError(400, 'VALIDATION_ERROR', 'Role identifier is required');
+    }
+    const result = await userService.updateRole(req.params.id, role, req.user!.id);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /api/v1/users/:id/institution — assign or change user's institution (super admin only)
+userRouter.patch('/:id/institution', isSuperAdmin, async (req, res, next) => {
+  try {
+    const { tenantId } = req.body;
+    const updated = await userService.updateTenant(req.params.id, tenantId || null);
+    res.json({ success: true, data: updated });
   } catch (err) {
     next(err);
   }

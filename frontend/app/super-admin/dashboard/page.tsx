@@ -298,7 +298,7 @@ export default function SuperAdminDashboardPage() {
           <div className="mt-3 flex items-end justify-between">
             <div>
               <p className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
-                {liveData?.totalUsers?.toLocaleString() || '12,840'}
+                {liveData?.totalUsers !== undefined ? liveData.totalUsers.toLocaleString() : (overview.isLoading ? '...' : '0')}
               </p>
               <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                 <ArrowUp size={13} strokeWidth={2.5} />
@@ -323,7 +323,7 @@ export default function SuperAdminDashboardPage() {
           <div className="mt-3 flex items-end justify-between">
             <div>
               <p className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
-                {liveData?.totalTenants?.toLocaleString() || '186'}
+                {liveData?.totalTenants !== undefined ? liveData.totalTenants.toLocaleString() : (overview.isLoading ? '...' : '0')}
               </p>
               <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                 <ArrowUp size={13} strokeWidth={2.5} />

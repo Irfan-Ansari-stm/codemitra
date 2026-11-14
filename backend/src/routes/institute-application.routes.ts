@@ -35,3 +35,23 @@ instituteApplicationRouter.patch('/:id', isSuperAdmin, validate(reviewInstituteA
     res.json({ success: true, data: application });
   } catch (error) { next(error); }
 });
+
+instituteApplicationRouter.post('/:id/approve', isSuperAdmin, async (req, res, next) => {
+  try {
+    const application = await instituteApplicationService.review(
+      req.params.id, req.user!.id, 'approved', req.body?.reviewNote,
+      (req as any).requestId
+    );
+    res.json({ success: true, data: application });
+  } catch (error) { next(error); }
+});
+
+instituteApplicationRouter.post('/:id/reject', isSuperAdmin, async (req, res, next) => {
+  try {
+    const application = await instituteApplicationService.review(
+      req.params.id, req.user!.id, 'rejected', req.body?.reviewNote,
+      (req as any).requestId
+    );
+    res.json({ success: true, data: application });
+  } catch (error) { next(error); }
+});

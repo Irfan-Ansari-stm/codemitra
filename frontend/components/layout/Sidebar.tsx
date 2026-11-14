@@ -7,7 +7,7 @@ import {
   Activity, AlertOctagon, BarChart3, Bell, BookOpen, Building2, ChevronDown, ChevronUp,
   ClipboardCheck, ClipboardList, Code2, Cpu, CreditCard, Database, FileText, Flag,
   Globe, Headset, HelpCircle, Home, LayoutDashboard, LogOut, Menu, MessageSquare,
-  ScrollText, Settings, ShieldCheck, UserCheck, Users, X, Terminal,
+  ScrollText, Settings, ShieldCheck, Shield, KeyRound, UserCheck, Users, X, Terminal,
   GraduationCap, Trophy, Award, Receipt, Briefcase, Megaphone, MessagesSquare, Server, FileCode,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
@@ -36,8 +36,11 @@ function groupsForRole(role: string, tenantSlug?: string): NavGroup[] {
         label: 'Platform Administration',
         collapsible: true,
         links: [
+          { label: 'Overview', href: '/super-admin/dashboard', icon: LayoutDashboard },
           { label: 'Institutes', href: '/super-admin/institutions', icon: Building2 },
-          { label: 'All Users & Roles', href: '/super-admin/users', icon: Users },
+          { label: 'All Users', href: '/super-admin/users', icon: Users },
+          { label: 'Role Management', href: '/super-admin/roles', icon: Shield },
+          { label: 'Permissions Matrix', href: '/super-admin/permissions', icon: KeyRound },
           { label: 'Institute Students', href: '/super-admin/students', icon: UserCheck },
           { label: 'General Users', href: '/super-admin/general-users', icon: Users },
           { label: 'Batches & Cohorts', href: '/super-admin/batches', icon: GraduationCap },

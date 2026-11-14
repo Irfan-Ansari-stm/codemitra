@@ -61,7 +61,7 @@ export const createUserSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).max(128),
   name: z.string().min(2).max(255).trim(),
-  role: z.enum(['institution_admin', 'institution_student', 'general_student']),
+  role: z.string().min(2).max(100),
   tenantId: z.string().uuid().nullable().optional(),
   phone: z.string().max(30).optional(),
   bio: z.string().max(1000).optional(),
@@ -235,7 +235,15 @@ export const paginationSchema = z.object({
 });
 
 export const userListQuerySchema = paginationSchema.extend({
-  role: z.enum(['super_admin', 'institution_admin', 'institution_student', 'general_student']).optional(),
+  role: z.string().optional(),
+  status: z.enum(['all', 'active', 'inactive', 'suspended']).optional(),
+  verificationStatus: z.enum(['all', 'verified', 'unverified']).optional(),
+  standaloneOnly: z.preprocess((val) => val === 'true' || val === true, z.boolean()).optional(),
+  tenantId: z.string().optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
+  sortBy: z.enum(['name', 'email', 'role', 'status', 'createdAt', 'lastLoginAt']).optional(),
+  sortOrder: z.enum(['asc', 'desc']).optional(),
 });
 
 // ── Course list query ──────────────────────────────────────────────

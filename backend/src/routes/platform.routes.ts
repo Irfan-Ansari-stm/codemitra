@@ -1549,14 +1549,23 @@ platformRouter.patch('/super-admin/notifications/templates/:id', isSuperAdmin, a
 // =============================================================================
 platformRouter.get('/super-admin/students', isSuperAdmin, async (req, res, next) => {
   try {
-    const { search, tenantId, page, limit } = req.query as any;
+    const { search, tenantId, status, verificationStatus, page, limit } = req.query as any;
     const result = await superAdminStudentsService.listStudents({
       search: search as string,
       tenantId: tenantId as string,
+      status: status as string,
+      verificationStatus: verificationStatus as string,
       page: parseInt(page) || 1,
       limit: parseInt(limit) || 20,
     });
     res.json({ success: true, ...result });
+  } catch (err) { next(err); }
+});
+
+platformRouter.get('/super-admin/students/:id', isSuperAdmin, async (req, res, next) => {
+  try {
+    const details = await superAdminStudentsService.getStudentDetails(req.params.id);
+    res.json({ success: true, data: details });
   } catch (err) { next(err); }
 });
 
@@ -1566,6 +1575,34 @@ platformRouter.post('/super-admin/students/:id/verify', isSuperAdmin, async (req
     const result = await superAdminStudentsService.verifyStudent(
       req.params.id,
       Boolean(isVerified),
+      req.user!.id,
+      req.ip,
+      (req as any).requestId
+    );
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+});
+
+platformRouter.patch('/super-admin/students/:id/status', isSuperAdmin, async (req, res, next) => {
+  try {
+    const { isSuspended } = req.body;
+    const result = await superAdminStudentsService.toggleStatus(
+      req.params.id,
+      Boolean(isSuspended),
+      req.user!.id,
+      req.ip,
+      (req as any).requestId
+    );
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+});
+
+platformRouter.patch('/super-admin/students/:id/institution', isSuperAdmin, async (req, res, next) => {
+  try {
+    const { tenantId } = req.body;
+    const result = await superAdminStudentsService.assignTenant(
+      req.params.id,
+      tenantId || null,
       req.user!.id,
       req.ip,
       (req as any).requestId

@@ -1,13 +1,20 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LanguageSidebar } from './LanguageSidebar';
 import { FileTabs } from './FileTabs';
 import { OutputPanel } from './OutputPanel';
+import { OnlineIde } from './OnlineIde';
+import { ThemeProvider } from '@/components/theme/ThemeProvider';
 import { IDE_LANGUAGES, IdeFile, IdeExecutionState } from './types';
 
 // Mock Monaco Editor since it requires DOM canvas & web workers
 vi.mock('@monaco-editor/react', () => ({
-  default: () => <div data-testid="mock-monaco-editor">Monaco Editor Mock</div>,
+  default: (props: any) => (
+    <div data-testid="mock-monaco-editor" data-theme={props.theme}>
+      Monaco Editor Mock
+    </div>
+  ),
 }));
 
 describe('LanguageSidebar Component', () => {
@@ -151,5 +158,78 @@ describe('OutputPanel Component', () => {
     fireEvent.click(screen.getByRole('button', { name: /Stdin \(Input\)/i }));
     expect(screen.getByPlaceholderText(/Enter custom input lines here/i)).toBeInTheDocument();
     expect(screen.getByDisplayValue('custom stdin line')).toBeInTheDocument();
+  });
+});
+
+describe('OnlineIde Theme Integration', () => {
+  const createTestClient = () =>
+    new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    });
+
+  it('integrates light and dark mode with the application theme and toggle controls', async () => {
+    // Start with default light mode in ThemeProvider
+    localStorage.setItem('theme', 'light');
+    const queryClient = createTestClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <OnlineIde />
+        </ThemeProvider>
+      </QueryClientProvider>
+    );
+
+    const monaco = await screen.findByTestId('mock-monaco-editor');
+    // In light mode, editor theme should be 'light'
+    expect(monaco).toHaveAttribute('data-theme', 'light');
+
+    // Click quick theme toggle in IDE toolbar
+    const quickToggleBtn = screen.getByTitle(/Switch to Dark Mode/i);
+    expect(quickToggleBtn).toBeInTheDocument();
+    fireEvent.click(quickToggleBtn);
+
+    // Editor should now switch to vs-dark
+    expect(monaco).toHaveAttribute('data-theme', 'vs-dark');
+
+    // Open settings menu and verify theme toggle inside settings
+    const settingsBtn = screen.getByTitle('Editor Settings');
+    fireEvent.click(settingsBtn);
+
+    const settingsThemeBtn = screen.getByRole('button', { name: /Dark Mode/i });
+    expect(settingsThemeBtn).toBeInTheDocument();
+
+    // Click theme toggle in settings to switch back to light
+    fireEvent.click(settingsThemeBtn);
+    expect(monaco).toHaveAttribute('data-theme', 'light');
+  });
+
+  it('opens and closes Projects modal and Execution History drawer', async () => {
+    const queryClient = createTestClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <OnlineIde />
+        </ThemeProvider>
+      </QueryClientProvider>
+    );
+
+    // Open projects modal
+    const projectBtn = screen.getByTitle('Switch Workspace Project');
+    fireEvent.click(projectBtn);
+    expect(screen.getByText('Workspace Projects')).toBeInTheDocument();
+    expect(screen.getByText(/Create New Project/i)).toBeInTheDocument();
+
+    // Close projects modal
+    const closeBtns = screen.getAllByRole('button', { name: /Close/i });
+    fireEvent.click(closeBtns[0]);
+
+    // Open history drawer
+    const historyBtn = screen.getByTitle(/Execution History/i);
+    fireEvent.click(historyBtn);
+    expect(screen.getByText('Execution History')).toBeInTheDocument();
   });
 });

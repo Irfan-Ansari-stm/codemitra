@@ -348,8 +348,8 @@ export const tenantApi = {
   current: () =>
     api.get<ApiResponse<{ id: string; name: string; slug: string }>>('/tenants/me'),
 
-  list: (page = 1, limit = 20) =>
-    api.get<ApiResponse<any[]>>(`/tenants?page=${page}&limit=${limit}`),
+  list: (page = 1, limit = 20, search?: string) =>
+    api.get<ApiResponse<any[]>>('/tenants', { params: { page, limit, search: search || undefined } }),
 
   get: (id: string) =>
     api.get<ApiResponse<any>>(`/tenants/${id}`),
@@ -359,6 +359,9 @@ export const tenantApi = {
 
   update: (id: string, data: any) =>
     api.patch<ApiResponse<any>>(`/tenants/${id}`, data),
+
+  updateStatus: (id: string, isActive: boolean) =>
+    api.patch<ApiResponse<any>>(`/tenants/${id}/status`, { isActive }),
 
   quota: (id: string) =>
     api.get(`/tenants/${id}/quota`),
@@ -391,11 +394,54 @@ export const userApi = {
   update: (id: string, data: any) =>
     api.patch<ApiResponse<any>>(`/users/${id}`, data),
 
+  updateStatus: (id: string, data: { isActive?: boolean; isSuspended?: boolean; reason?: string }) =>
+    api.patch<ApiResponse<any>>(`/users/${id}/status`, data),
+
+  updateRole: (id: string, role: string) =>
+    api.patch<ApiResponse<any>>(`/users/${id}/role`, { role }),
+
+  updateInstitution: (id: string, tenantId: string | null) =>
+    api.patch<ApiResponse<any>>(`/users/${id}/institution`, { tenantId }),
+
   resetPassword: (id: string, newPassword: string) =>
     api.post(`/users/${id}/reset-password`, { newPassword }),
 
   delete: (id: string) =>
     api.delete<ApiResponse<{ message: string }>>(`/users/${id}`),
+};
+
+export const roleApi = {
+  list: () =>
+    api.get<ApiResponse<any[]>>('/roles'),
+
+  get: (id: string) =>
+    api.get<ApiResponse<any>>(`/roles/${id}`),
+
+  create: (data: { name: string; slug: string; description?: string; permissionIds?: string[] }) =>
+    api.post<ApiResponse<any>>('/roles', data),
+
+  update: (id: string, data: { name?: string; description?: string; isActive?: boolean }) =>
+    api.patch<ApiResponse<any>>(`/roles/${id}`, data),
+
+  delete: (id: string) =>
+    api.delete<ApiResponse<{ success: boolean; message: string }>>(`/roles/${id}`),
+
+  duplicate: (id: string, data: { name: string; slug: string }) =>
+    api.post<ApiResponse<any>>(`/roles/${id}/duplicate`, data),
+
+  getPermissions: (id: string) =>
+    api.get<ApiResponse<any[]>>(`/roles/${id}/permissions`),
+
+  updatePermissions: (id: string, permissionIds: string[]) =>
+    api.put<ApiResponse<any>>(`/roles/${id}/permissions`, { permissionIds }),
+};
+
+export const permissionApi = {
+  list: () =>
+    api.get<ApiResponse<{ all: any[]; grouped: Record<string, any[]> }>>('/permissions'),
+
+  me: () =>
+    api.get<ApiResponse<{ role: any; permissions: any[]; permissionSlugs: string[] }>>('/permissions/me'),
 };
 
 // ── COURSE API ──
@@ -598,6 +644,86 @@ export const executionApi = {
     api.get<ApiResponse<any>>('/execution/capabilities'),
 };
 
+// ── ONLINE IDE API (Workspaces, Projects, Execution, History, Settings) ──
+export const ideApi = {
+  execute: (data: {
+    language: string | number;
+    sourceCode: string;
+    stdin?: string;
+    engine?: 'auto' | 'wasm' | 'judge0';
+    projectId?: string;
+  }) => api.post<ApiResponse<any>>('/ide/execute', data),
+
+  getExecution: (executionId: string) =>
+    api.get<ApiResponse<any>>(`/ide/executions/${executionId}`),
+
+  getLanguages: () =>
+    api.get<ApiResponse<any[]>>('/ide/languages'),
+
+  getWorkspace: () =>
+    api.get<ApiResponse<any>>('/ide/workspace'),
+
+  getProjects: () =>
+    api.get<ApiResponse<any[]>>('/ide/projects'),
+
+  createProject: (data: {
+    projectName: string;
+    description?: string;
+    defaultLanguage?: string;
+    initialFiles?: Array<{ name: string; content?: string; language?: string }>;
+  }) => api.post<ApiResponse<any>>('/ide/projects', data),
+
+  getProject: (projectId: string) =>
+    api.get<ApiResponse<any>>(`/ide/projects/${projectId}`),
+
+  updateProject: (projectId: string, data: any) =>
+    api.put<ApiResponse<any>>(`/ide/projects/${projectId}`, data),
+
+  deleteProject: (projectId: string) =>
+    api.delete<ApiResponse<any>>(`/ide/projects/${projectId}`),
+
+  createFile: (
+    projectId: string,
+    data: { fileName: string; filePath?: string; language?: string; sourceCode?: string }
+  ) => api.post<ApiResponse<any>>(`/ide/projects/${projectId}/files`, data),
+
+  updateFile: (
+    projectId: string,
+    fileId: string,
+    data: { fileName?: string; filePath?: string; language?: string; sourceCode?: string }
+  ) => api.put<ApiResponse<any>>(`/ide/projects/${projectId}/files/${fileId}`, data),
+
+  deleteFile: (projectId: string, fileId: string) =>
+    api.delete<ApiResponse<any>>(`/ide/projects/${projectId}/files/${fileId}`),
+
+  saveTabs: (
+    projectId: string,
+    tabs: Array<{ fileId: string; tabOrder: number; isActive: boolean }>
+  ) => api.put<ApiResponse<any>>(`/ide/projects/${projectId}/tabs`, { tabs }),
+
+  getHistory: (params?: { page?: number; limit?: number; language?: string; projectId?: string }) =>
+    api.get<ApiResponse<any[]>>('/ide/history', { params }),
+
+  getHistoryItem: (executionId: string) =>
+    api.get<ApiResponse<any>>(`/ide/history/${executionId}`),
+
+  deleteHistoryItem: (executionId: string) =>
+    api.delete<ApiResponse<any>>(`/ide/history/${executionId}`),
+
+  getSettings: () =>
+    api.get<ApiResponse<any>>('/ide/settings'),
+
+  updateSettings: (data: {
+    editorTheme?: string;
+    fontSize?: number;
+    tabSize?: number;
+    wordWrap?: boolean;
+    minimapEnabled?: boolean;
+    autoSaveEnabled?: boolean;
+    defaultLanguage?: string;
+  }) => api.put<ApiResponse<any>>('/ide/settings', data),
+};
+
 // ── ASSIGNMENT API ──
 export const assignmentApi = {
   list: (params?: any) =>
@@ -765,10 +891,25 @@ export const announcementApi = {
 
 // ── SUPER ADMIN EXTENDED APIS ──
 export const superAdminStudentsApi = {
-  list: (params?: { search?: string; tenantId?: string; page?: number; limit?: number }) =>
+  list: (params?: {
+    search?: string;
+    tenantId?: string;
+    status?: string;
+    verificationStatus?: string;
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+  }) =>
     api.get<ApiResponse<any>>('/super-admin/students', { params }),
+  getDetails: (id: string) =>
+    api.get<ApiResponse<any>>(`/super-admin/students/${id}`),
   verify: (id: string, isVerified: boolean) =>
     api.post<ApiResponse<any>>(`/super-admin/students/${id}/verify`, { isVerified }),
+  toggleStatus: (id: string, isSuspended: boolean) =>
+    api.patch<ApiResponse<any>>(`/super-admin/students/${id}/status`, { isSuspended }),
+  assignInstitution: (id: string, tenantId: string | null) =>
+    api.patch<ApiResponse<any>>(`/super-admin/students/${id}/institution`, { tenantId }),
   export: (tenantId?: string) =>
     api.get<ApiResponse<any[]>>('/super-admin/students/export', { params: { tenantId } }),
 };
@@ -825,6 +966,83 @@ export const superAdminFeedbackApi = {
 };
 
 
+
+export const batchApi = {
+  getAnalytics: (tenantId?: string) =>
+    api.get<ApiResponse<any>>('/super-admin/batches/analytics', { params: { tenantId } }),
+
+  list: (params?: {
+    search?: string;
+    tenantId?: string;
+    status?: string;
+    academicYearId?: string;
+    department?: string;
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+  }) => api.get<ApiResponse<any>>('/super-admin/batches', { params }),
+
+  get: (id: string) =>
+    api.get<ApiResponse<any>>(`/super-admin/batches/${id}`),
+
+  create: (data: any) =>
+    api.post<ApiResponse<any>>('/super-admin/batches', data),
+
+  update: (id: string, data: any) =>
+    api.patch<ApiResponse<any>>(`/super-admin/batches/${id}`, data),
+
+  updateStatus: (id: string, status: string) =>
+    api.patch<ApiResponse<any>>(`/super-admin/batches/${id}/status`, { status }),
+
+  delete: (id: string) =>
+    api.delete<ApiResponse<any>>(`/super-admin/batches/${id}`),
+
+  duplicate: (id: string, data: { name: string; code: string }) =>
+    api.post<ApiResponse<any>>(`/super-admin/batches/${id}/duplicate`, data),
+
+  getStudents: (id: string, search?: string) =>
+    api.get<ApiResponse<any[]>>(`/super-admin/batches/${id}/students`, { params: { search } }),
+
+  enrollStudent: (id: string, data: { studentId: string; sectionId?: string | null; rollNumber?: string | null }) =>
+    api.post<ApiResponse<any>>(`/super-admin/batches/${id}/students`, data),
+
+  bulkEnroll: (id: string, data: { studentIds: string[]; sectionId?: string | null }) =>
+    api.post<ApiResponse<any>>(`/super-admin/batches/${id}/students/bulk-enroll`, data),
+
+  transferStudent: (id: string, data: { studentId: string; targetBatchId: string; targetSectionId?: string | null }) =>
+    api.post<ApiResponse<any>>(`/super-admin/batches/${id}/students/transfer`, data),
+
+  removeStudent: (id: string, studentId: string) =>
+    api.delete<ApiResponse<any>>(`/super-admin/batches/${id}/students/${studentId}`),
+
+  getSections: (id: string) =>
+    api.get<ApiResponse<any[]>>(`/super-admin/batches/${id}/sections`),
+
+  createSection: (id: string, data: { name: string; code?: string; capacity?: number; room?: string; instructorId?: string }) =>
+    api.post<ApiResponse<any>>(`/super-admin/batches/${id}/sections`, data),
+
+  deleteSection: (sectionId: string) =>
+    api.delete<ApiResponse<any>>(`/super-admin/sections/${sectionId}`),
+
+  getCourses: (id: string) =>
+    api.get<ApiResponse<any[]>>(`/super-admin/batches/${id}/courses`),
+
+  assignCourse: (id: string, data: { courseId: string; instructorId?: string }) =>
+    api.post<ApiResponse<any>>(`/super-admin/batches/${id}/courses`, data),
+
+  removeCourse: (id: string, courseId: string) =>
+    api.delete<ApiResponse<any>>(`/super-admin/batches/${id}/courses/${courseId}`),
+
+  getSettings: () =>
+    api.get<ApiResponse<any>>('/super-admin/batches/settings'),
+
+  updateSettings: (data: any) =>
+    api.put<ApiResponse<any>>('/super-admin/batches/settings', data),
+
+  export: (tenantId?: string) =>
+    api.get<ApiResponse<any[]>>('/super-admin/batches/export', { params: { tenantId } }),
+};
 
 // Error handling utility
 export function getErrorMessage(error: any): string {

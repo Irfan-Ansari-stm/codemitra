@@ -3,18 +3,29 @@ import { AppError } from '../middleware/errorHandler';
 import { toSlug } from '../utils/slug';
 
 export const tenantService = {
-  async list(page = 1, limit = 20) {
+  async list(page = 1, limit = 20, search?: string) {
     const offset = (page - 1) * limit;
+    const conditions: string[] = ['is_deleted = FALSE'];
+    const params: any[] = [];
+
+    if (search && search.trim()) {
+      params.push(`%${search.trim()}%`);
+      conditions.push(`(name ILIKE $${params.length} OR slug ILIKE $${params.length} OR contact_email ILIKE $${params.length})`);
+    }
+
+    const where = `WHERE ${conditions.join(' AND ')}`;
     const result = await pool.query(
-      `SELECT id, name, slug, plan, max_students, is_active, plan_expires_at, created_at
-       FROM tenants WHERE is_deleted = FALSE
-       ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
-      [limit, offset]
+      `SELECT id, name, slug, plan, max_students, is_active, plan_expires_at, created_at,
+              contact_email, contact_phone, website_url, address
+       FROM tenants ${where}
+       ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limit, offset]
     );
     const count = await pool.query(
-      'SELECT COUNT(*) FROM tenants WHERE is_deleted = FALSE'
+      `SELECT COUNT(*) FROM tenants ${where}`,
+      params
     );
-    return { data: result.rows, total: parseInt(count.rows[0].count) };
+    return { data: result.rows, total: parseInt(count.rows[0].count), page, limit };
   },
 
   async getById(id: string) {
@@ -23,7 +34,36 @@ export const tenantService = {
       [id]
     );
     if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Tenant not found');
-    return result.rows[0];
+    const tenant = result.rows[0];
+
+    // Fetch related statistics and administrators
+    const [studentsRes, adminsRes, coursesRes] = await Promise.all([
+      pool.query(
+        `SELECT
+           COUNT(*)::int AS total_students,
+           COUNT(*) FILTER (WHERE is_active = TRUE AND is_deleted = FALSE)::int AS active_students
+         FROM users WHERE tenant_id = $1 AND role = 'institution_student'`,
+        [id]
+      ),
+      pool.query(
+        `SELECT id, name, email, phone, is_active, created_at, last_login_at
+         FROM users WHERE tenant_id = $1 AND role = 'institution_admin' AND is_deleted = FALSE`,
+        [id]
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS total_courses
+         FROM courses WHERE tenant_id = $1 AND is_deleted = FALSE`,
+        [id]
+      ),
+    ]);
+
+    return {
+      ...tenant,
+      total_students: studentsRes.rows[0]?.total_students || 0,
+      active_students: studentsRes.rows[0]?.active_students || 0,
+      total_courses: coursesRes.rows[0]?.total_courses || 0,
+      admins: adminsRes.rows,
+    };
   },
 
   async getBySlug(slug: string) {

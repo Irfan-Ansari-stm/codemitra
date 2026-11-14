@@ -41,7 +41,7 @@ export function FileTabs({
   };
 
   return (
-    <div className="flex items-center bg-slate-900 border-b border-slate-800 px-2 overflow-x-auto select-none scrollbar-none h-10">
+    <div className="flex items-center bg-slate-100/90 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-2 overflow-x-auto select-none scrollbar-none h-10 transition-colors">
       <div className="flex items-center gap-1">
         {files.map((file) => {
           const isActive = file.id === activeFileId;
@@ -53,8 +53,8 @@ export function FileTabs({
               onClick={() => onSelectFile(file.id)}
               className={`group flex items-center gap-2 px-3 py-1.5 text-xs rounded-t-md cursor-pointer border-t-2 transition-all ${
                 isActive
-                  ? 'bg-slate-950 text-white border-blue-500 font-medium shadow-sm'
-                  : 'bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border-transparent'
+                  ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white border-blue-500 font-medium shadow-sm'
+                  : 'bg-slate-200/50 hover:bg-slate-200/80 text-slate-600 hover:text-slate-900 dark:bg-slate-900/60 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/50 border-transparent'
               }`}
             >
               {/* Language Icon */}
@@ -75,12 +75,12 @@ export function FileTabs({
                       if (e.key === 'Escape') setEditingId(null);
                     }}
                     onBlur={() => handleSaveRename(file.id)}
-                    className="bg-slate-800 text-white px-1.5 py-0.5 rounded text-xs outline-none border border-blue-500 w-24"
+                    className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-1.5 py-0.5 rounded text-xs outline-none border border-blue-500 w-24"
                   />
                   <button
                     type="button"
                     onClick={() => handleSaveRename(file.id)}
-                    className="text-emerald-400 hover:text-emerald-300"
+                    className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
                   >
                     <Check size={12} />
                   </button>
@@ -102,7 +102,7 @@ export function FileTabs({
                     type="button"
                     onClick={(e) => handleStartRename(e, file)}
                     title="Rename file"
-                    className="text-slate-500 hover:text-slate-300 rounded p-0.5"
+                    className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 rounded p-0.5"
                   >
                     <Edit2 size={10} />
                   </button>
@@ -114,7 +114,7 @@ export function FileTabs({
                         onCloseFile(file.id);
                       }}
                       title="Close file"
-                      className="text-slate-500 hover:text-rose-400 rounded p-0.5"
+                      className="text-slate-400 hover:text-rose-600 dark:text-slate-500 dark:hover:text-rose-400 rounded p-0.5"
                     >
                       <X size={11} />
                     </button>
@@ -130,7 +130,7 @@ export function FileTabs({
           type="button"
           onClick={onAddFile}
           title="Create New File"
-          className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors ml-1"
+          className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-200/70 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 rounded transition-colors ml-1"
         >
           <Plus size={14} />
         </button>

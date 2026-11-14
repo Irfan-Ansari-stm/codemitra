@@ -6,6 +6,7 @@ import { LANGUAGES } from '@/types';
 import { ChevronDown, Play, RotateCcw, Send, Terminal } from 'lucide-react';
 import { Suspense, useEffect } from 'react';
 import { isLanguageWasmSupported, wasmManager } from '@/services/wasm-executor/wasm-manager';
+import { useTheme } from '@/components/theme/ThemeProvider';
 
 // Dynamic import to prevent SSR issues with Monaco
 const MonacoEditor = dynamic(
@@ -50,6 +51,16 @@ export default function CodeEditor({
     getCode,
     clearCode,
   } = useEditorStore();
+
+  const { theme: appTheme, toggleTheme } = useTheme();
+  const isDark = appTheme === 'dark';
+  const activeTheme = isDark ? (theme === 'light' ? 'light' : 'vs-dark') : (theme === 'vs-dark' ? 'vs-dark' : 'light');
+
+  const handleToggleTheme = () => {
+    const nextTheme = activeTheme === 'vs-dark' ? 'light' : 'vs-dark';
+    setTheme(nextTheme);
+    toggleTheme();
+  };
 
   const languages = Object.entries(LANGUAGES).map(([id, language]) => ({
     id: Number(id),
@@ -159,11 +170,11 @@ export default function CodeEditor({
           {/* Theme Toggle */}
           <button
             type="button"
-            onClick={() => setTheme(theme === 'vs-dark' ? 'light' : 'vs-dark')}
+            onClick={handleToggleTheme}
             className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors text-gray-700 dark:text-gray-200"
             title="Toggle Editor Theme"
           >
-            {theme === 'vs-dark' ? '☀️' : '🌙'}
+            {activeTheme === 'vs-dark' ? '☀️' : '🌙'}
           </button>
 
           {/* Reset Code to Starter Template */}
@@ -215,7 +226,7 @@ export default function CodeEditor({
       <Suspense fallback={<EditorSkeleton />}>
         <div className="flex-1 overflow-hidden min-h-[300px]">
           <MonacoEditor
-            theme={theme}
+            theme={activeTheme}
             defaultLanguage="python"
             language={currentLanguage?.monacoLang || 'python'}
             value={getCode(problemId, languageId)}

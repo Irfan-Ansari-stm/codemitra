@@ -10,15 +10,19 @@ export const superAdminStudentsService = {
   async listStudents(params: {
     search?: string;
     tenantId?: string;
+    status?: string;
+    verificationStatus?: string;
     page?: number;
     limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
   }) {
     const page = Math.max(1, params.page || 1);
     const limit = Math.min(100, Math.max(1, params.limit || 20));
     const offset = (page - 1) * limit;
 
     const conditions: string[] = [
-      "u.role = 'institution_student'",
+      "(u.role::text = 'institution_student' OR r.slug = 'institution_student')",
       'u.is_deleted = FALSE',
     ];
     const queryParams: any[] = [];
@@ -35,6 +39,24 @@ export const superAdminStudentsService = {
       );
     }
 
+    if (params.status && params.status !== 'all') {
+      if (params.status === 'active') {
+        conditions.push(`u.is_active = TRUE AND (u.metadata->>'isSuspended' IS NULL OR u.metadata->>'isSuspended' = 'false')`);
+      } else if (params.status === 'inactive') {
+        conditions.push(`u.is_active = FALSE AND (u.metadata->>'isSuspended' IS NULL OR u.metadata->>'isSuspended' = 'false')`);
+      } else if (params.status === 'suspended') {
+        conditions.push(`u.metadata->>'isSuspended' = 'true'`);
+      }
+    }
+
+    if (params.verificationStatus && params.verificationStatus !== 'all') {
+      if (params.verificationStatus === 'verified') {
+        conditions.push('u.is_email_verified = TRUE');
+      } else if (params.verificationStatus === 'unverified') {
+        conditions.push('u.is_email_verified = FALSE');
+      }
+    }
+
     const where = conditions.join(' AND ');
 
     const [rowsRes, countRes] = await Promise.all([
@@ -48,6 +70,8 @@ export const superAdminStudentsService = {
                 COALESCE(us.current_streak_days, 0)::int AS current_streak_days
          FROM users u
          LEFT JOIN tenants t ON t.id = u.tenant_id
+         LEFT JOIN user_roles ur ON ur.user_id = u.id
+         LEFT JOIN roles r ON r.id = ur.role_id
          LEFT JOIN user_stats us ON us.user_id = u.id
          WHERE ${where}
          ORDER BY u.created_at DESC
@@ -55,7 +79,11 @@ export const superAdminStudentsService = {
         [...queryParams, limit, offset]
       ),
       pool.query(
-        `SELECT COUNT(*)::int AS total FROM users u WHERE ${where}`,
+        `SELECT COUNT(DISTINCT u.id)::int AS total
+         FROM users u
+         LEFT JOIN user_roles ur ON ur.user_id = u.id
+         LEFT JOIN roles r ON r.id = ur.role_id
+         WHERE ${where}`,
         queryParams
       ),
     ]);
@@ -124,6 +152,111 @@ export const superAdminStudentsService = {
     );
 
     return res.rows;
+  },
+
+  async getStudentDetails(studentId: string) {
+    const res = await pool.query(
+      `SELECT u.id, u.name, u.email, u.phone, u.avatar_url, u.is_active,
+              u.is_email_verified, u.last_login_at, u.created_at, u.metadata,
+              u.tenant_id, t.name AS tenant_name, t.slug AS tenant_slug,
+              COALESCE(us.total_problems_solved, 0)::int AS total_problems_solved,
+              COALESCE(us.easy_solved, 0)::int AS easy_solved,
+              COALESCE(us.medium_solved, 0)::int AS medium_solved,
+              COALESCE(us.hard_solved, 0)::int AS hard_solved,
+              COALESCE(us.total_submissions, 0)::int AS total_submissions,
+              COALESCE(us.total_score, 0)::numeric AS total_score,
+              COALESCE(us.current_streak_days, 0)::int AS current_streak_days,
+              (SELECT COUNT(DISTINCT up.chapter_id)::int FROM user_progress up WHERE up.user_id = u.id) AS progress_chapters_count
+       FROM users u
+       LEFT JOIN tenants t ON t.id = u.tenant_id
+       LEFT JOIN user_stats us ON us.user_id = u.id
+       WHERE u.id = $1 AND NOT u.is_deleted`,
+      [studentId]
+    );
+
+    if (!res.rows[0]) {
+      throw new AppError(404, 'NOT_FOUND', 'Student record not found');
+    }
+
+    return res.rows[0];
+  },
+
+  async toggleStatus(
+    studentId: string,
+    isSuspended: boolean,
+    adminId: string,
+    ipAddress?: string,
+    requestId?: string
+  ) {
+    const check = await pool.query(
+      `SELECT id, metadata, is_active FROM users WHERE id = $1 AND NOT is_deleted`,
+      [studentId]
+    );
+    if (!check.rows[0]) {
+      throw new AppError(404, 'NOT_FOUND', 'Student not found');
+    }
+
+    const currentMeta = check.rows[0].metadata || {};
+    const updatedMeta = { ...currentMeta, isSuspended };
+
+    const res = await pool.query(
+      `UPDATE users
+       SET metadata = $1, is_active = $2, updated_at = NOW()
+       WHERE id = $3
+       RETURNING id, name, email, is_active, metadata`,
+      [JSON.stringify(updatedMeta), !isSuspended, studentId]
+    );
+
+    await writeAuditLog({
+      userId: adminId,
+      action: isSuspended ? 'student.suspend' : 'student.reactivate',
+      resourceType: 'user',
+      resourceId: studentId,
+      newData: { isSuspended, isActive: !isSuspended },
+      ipAddress,
+      requestId,
+    });
+
+    return res.rows[0];
+  },
+
+  async assignTenant(
+    studentId: string,
+    tenantId: string | null,
+    adminId: string,
+    ipAddress?: string,
+    requestId?: string
+  ) {
+    if (tenantId) {
+      const tCheck = await pool.query(`SELECT id, name FROM tenants WHERE id = $1 AND NOT is_deleted`, [tenantId]);
+      if (!tCheck.rows[0]) {
+        throw new AppError(404, 'NOT_FOUND', 'Target institution not found');
+      }
+    }
+
+    const res = await pool.query(
+      `UPDATE users
+       SET tenant_id = $1, updated_at = NOW()
+       WHERE id = $2 AND NOT is_deleted
+       RETURNING id, name, email, tenant_id`,
+      [tenantId, studentId]
+    );
+
+    if (!res.rows[0]) {
+      throw new AppError(404, 'NOT_FOUND', 'Student not found');
+    }
+
+    await writeAuditLog({
+      userId: adminId,
+      action: 'student.assign_institution',
+      resourceType: 'user',
+      resourceId: studentId,
+      newData: { tenantId },
+      ipAddress,
+      requestId,
+    });
+
+    return res.rows[0];
   },
 };
 

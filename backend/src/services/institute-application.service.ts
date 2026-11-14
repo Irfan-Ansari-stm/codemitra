@@ -36,11 +36,22 @@ export const instituteApplicationService = {
     const offsetParam = status ? '$3' : '$2';
     const [rows, count] = await Promise.all([
       pool.query(
-        `SELECT ia.id, ia.applicant_user_id, u.name AS applicant_name, u.email AS applicant_email,
-                ia.institution_name, ia.slug, ia.contact_email, ia.contact_phone,
-                ia.website_url, ia.address, ia.status, ia.review_note,
-                ia.reviewed_by, ia.reviewed_at, ia.tenant_id, ia.created_at
-         FROM institute_applications ia JOIN users u ON u.id = ia.applicant_user_id
+        `SELECT ia.id,
+                ia.applicant_user_id AS "applicantUserId", ia.applicant_user_id,
+                u.name AS "applicantName", u.name AS applicant_name,
+                u.email AS "applicantEmail", u.email AS applicant_email,
+                ia.institution_name AS "institutionName", ia.institution_name,
+                ia.slug,
+                ia.contact_email AS "contactEmail", ia.contact_email,
+                ia.contact_phone AS "contactPhone", ia.contact_phone,
+                ia.website_url AS "websiteUrl", ia.website_url,
+                ia.address, ia.status,
+                ia.review_note AS "reviewNote", ia.review_note,
+                ia.reviewed_by AS "reviewedBy", ia.reviewed_by,
+                ia.reviewed_at AS "reviewedAt", ia.reviewed_at,
+                ia.tenant_id AS "tenantId", ia.tenant_id,
+                ia.created_at AS "createdAt", ia.created_at
+         FROM institute_applications ia LEFT JOIN users u ON u.id = ia.applicant_user_id
          ${where} ORDER BY ia.created_at DESC LIMIT ${limitParam} OFFSET ${offsetParam}`,
         values
       ),
@@ -56,7 +67,7 @@ export const instituteApplicationService = {
       await client.query('BEGIN');
       const locked = await client.query(
         `SELECT ia.*, u.name AS applicant_name
-         FROM institute_applications ia JOIN users u ON u.id = ia.applicant_user_id
+         FROM institute_applications ia LEFT JOIN users u ON u.id = ia.applicant_user_id
          WHERE ia.id = $1 FOR UPDATE OF ia`, [id]
       );
       const application = locked.rows[0];
