@@ -129,6 +129,22 @@ export function ProjectsModal({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {!user && (
+            <div className="rounded-xl border border-blue-500/20 bg-blue-50/60 p-3.5 text-xs text-slate-700 dark:bg-blue-950/30 dark:text-slate-300">
+              <div className="flex items-start gap-3">
+                <Folder className="h-5 w-5 shrink-0 text-blue-500 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold text-slate-900 dark:text-white">
+                    Guest Playground Session
+                  </p>
+                  <p className="mt-0.5 text-slate-600 dark:text-slate-400">
+                    Your code is automatically saved in your browser. <Link href="/login?next=/ide" className="font-semibold text-blue-600 underline dark:text-blue-400">Sign in</Link> or <Link href="/register" className="font-semibold text-blue-600 underline dark:text-blue-400">register</Link> to sync cloud projects across devices.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Create Button or Form */}
           {!isCreating ? (
             <button
@@ -201,7 +217,13 @@ export function ProjectsModal({
                 type="button"
                 onClick={() => {
                   if (newProject.projectName.trim()) {
-                    createMutation.mutate(newProject);
+                    if (user) {
+                      createMutation.mutate(newProject);
+                    } else {
+                      onSelectProject('guest-' + Date.now());
+                      setIsCreating(false);
+                      onClose();
+                    }
                   }
                 }}
                 disabled={!newProject.projectName.trim() || createMutation.isPending}

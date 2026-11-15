@@ -53,7 +53,7 @@ const MonacoEditor = dynamic(
 const LOCAL_STORAGE_KEY = 'codemitra_ide_files_v1';
 const LOCAL_STORAGE_LANG = 'codemitra_ide_lang_v1';
 
-export function OnlineIde() {
+export function OnlineIde({ className }: { className?: string } = {}) {
   const user = useAuthStore((state) => state.user);
   const isReady = useAuthStore((state) => state.isReady);
 
@@ -614,9 +614,9 @@ export function OnlineIde() {
   return (
     <div
       ref={ideContainerRef}
-      className={`flex flex-col h-[calc(100vh-4rem)] min-h-[580px] w-full bg-white dark:bg-slate-950 text-slate-900 dark:text-white rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xl dark:shadow-2xl transition-colors ${
+      className={`flex flex-col h-full min-h-[580px] w-full bg-white dark:bg-slate-950 text-slate-900 dark:text-white rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xl dark:shadow-2xl transition-colors ${
         isFullscreen ? 'fixed inset-0 z-50 rounded-none h-screen' : ''
-      }`}
+      } ${className || ''}`}
     >
       {/* ── Top IDE Action Bar ─────────────────────────────────────────── */}
       <header className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-xs transition-colors">

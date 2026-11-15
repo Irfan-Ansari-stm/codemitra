@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuthStore } from '@/store/authStore';
 import {
   History,
   X,
@@ -28,6 +30,7 @@ export function ExecutionHistoryDrawer({
   onClose,
   onRestoreCode,
 }: ExecutionHistoryDrawerProps) {
+  const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
@@ -45,7 +48,7 @@ export function ExecutionHistoryDrawer({
         return { items: [], meta: { page: 1, limit: 10, total: 0, totalPages: 1 } };
       }
     },
-    enabled: isOpen,
+    enabled: isOpen && !!user,
   });
 
   const deleteMutation = useMutation({
@@ -87,7 +90,36 @@ export function ExecutionHistoryDrawer({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {isLoading ? (
+          {!user ? (
+            <div className="rounded-2xl border border-blue-500/20 bg-blue-50/50 p-6 text-center dark:bg-blue-950/20 my-8">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                <History size={24} />
+              </div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Cloud Execution History
+              </h3>
+              <p className="mt-1.5 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                Guest sessions execute code with instant real-time results directly in the output panel.
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Sign in to automatically archive execution logs, inspect execution times and memory metrics, and restore past code snapshots.
+              </p>
+              <div className="mt-5 flex items-center justify-center gap-2">
+                <Link
+                  href="/login?next=/ide"
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-500"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/register"
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  Create Account
+                </Link>
+              </div>
+            </div>
+          ) : isLoading ? (
             <div className="py-12 text-center text-xs text-slate-400">Loading execution history...</div>
           ) : items.length === 0 ? (
             <div className="py-16 text-center text-xs text-slate-400 space-y-2">
