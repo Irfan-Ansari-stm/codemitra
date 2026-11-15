@@ -286,13 +286,13 @@ export const superAdminApprovalsService = {
       ).catch(() => ({ rows: [] })),
 
       pool.query(
-        `SELECT c.id, c.title, c.created_at, c.status,
-                t.name AS institution_name, u.name AS creator_name
-         FROM courses c
-         LEFT JOIN tenants t ON t.id = c.tenant_id
-         LEFT JOIN users u ON u.id = c.created_by
-         WHERE c.status = 'draft' AND NOT c.is_deleted
-         ORDER BY c.created_at DESC LIMIT 20`
+        `SELECT cs.id, cs.title, cs.submission_number, cs.submission_version, cs.category, cs.level,
+                cs.created_at, cs.status, t.name AS institution_name, u.name AS creator_name
+         FROM course_submissions cs
+         LEFT JOIN tenants t ON t.id = cs.tenant_id
+         LEFT JOIN users u ON u.id = cs.instructor_id
+         WHERE cs.status IN ('pending', 'submitted')
+         ORDER BY cs.created_at ASC LIMIT 50`
       ).catch(() => ({ rows: [] })),
     ]);
 

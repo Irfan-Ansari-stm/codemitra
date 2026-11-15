@@ -16,7 +16,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const tenantSlug = tenantQuery.data?.slug;
 
   useEffect(() => {
-    if (isReady && !user) router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+    if (isReady && !user) {
+      if (pathname.startsWith('/dashboard/ide')) {
+        router.replace('/ide');
+        return;
+      }
+      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+      return;
+    }
     if (!isReady || !user) return;
     if (user.role === 'super_admin' && pathname.startsWith('/institution')) router.replace('/super-admin/dashboard');
     if (user.role !== 'super_admin' && pathname.startsWith('/super-admin')) router.replace('/institution/dashboard');

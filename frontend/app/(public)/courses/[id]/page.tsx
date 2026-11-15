@@ -23,6 +23,8 @@ import { CurriculumSection } from '@/components/courses/CurriculumSection';
 import { EnrollmentPanel } from '@/components/courses/EnrollmentPanel';
 import { ProgressBar } from '@/components/courses/ProgressBar';
 import { STATUS_BADGE_STYLES } from '@/components/courses/constants';
+import { SignInPromptModal } from '@/components/auth/SignInPromptModal';
+import { useState } from 'react';
 
 function formatDuration(minutes?: number): string | null {
   if (typeof minutes !== 'number' || minutes <= 0) return null;
@@ -57,15 +59,19 @@ export default function CourseDetailPage() {
   const progressMutation = useUpdateChapterProgress(id ?? '');
 
   const course = courseQuery.data;
+  const [showSignInModal, setShowSignInModal] = useState(false);
 
   const handleToggleChapter = (chapterId: string, isCompleted: boolean) => {
-    if (!user) return;
+    if (!user) {
+      setShowSignInModal(true);
+      return;
+    }
     progressMutation.mutate({ chapterId, isCompleted });
   };
 
   const handleEnroll = () => {
     if (!user) {
-      window.location.href = `/login?next=/courses/${id}`;
+      setShowSignInModal(true);
       return;
     }
     enrollMutation.mutate(undefined, {
@@ -305,6 +311,14 @@ export default function CourseDetailPage() {
           </div>
         </div>
       </div>
+
+      <SignInPromptModal
+        isOpen={showSignInModal}
+        onClose={() => setShowSignInModal(false)}
+        title="Enroll in Course"
+        actionName="enroll and track course completion progress"
+        nextUrl={`/courses/${id}`}
+      />
     </main>
   );
 }

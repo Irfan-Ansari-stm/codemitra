@@ -35,6 +35,7 @@ import { ProjectsModal } from './ProjectsModal';
 import { ExecutionHistoryDrawer } from './ExecutionHistoryDrawer';
 import { wasmManager } from '@/services/wasm-executor/wasm-manager';
 import { useTheme } from '@/components/theme/ThemeProvider';
+import { useAuthStore } from '@/store/authStore';
 import { ideApi } from '@/lib/api';
 
 const MonacoEditor = dynamic(
@@ -53,6 +54,9 @@ const LOCAL_STORAGE_KEY = 'codemitra_ide_files_v1';
 const LOCAL_STORAGE_LANG = 'codemitra_ide_lang_v1';
 
 export function OnlineIde() {
+  const user = useAuthStore((state) => state.user);
+  const isReady = useAuthStore((state) => state.isReady);
+
   const [selectedLanguage, setSelectedLanguage] = useState<IdeLanguage>(IDE_LANGUAGES[0]);
   const [files, setFiles] = useState<IdeFile[]>([]);
   const [activeFileId, setActiveFileId] = useState<string>('');
@@ -61,7 +65,7 @@ export function OnlineIde() {
 
   // Workspace & Project State
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [activeProjectName, setActiveProjectName] = useState<string>('Workspace');
+  const [activeProjectName, setActiveProjectName] = useState<string>(user ? 'Workspace' : 'Guest Playground');
   const [isProjectsOpen, setIsProjectsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
@@ -75,6 +79,48 @@ export function OnlineIde() {
   const handleToggleTheme = () => {
     toggleTheme();
     setThemeOverride(null);
+  };
+
+  const handleEditorBeforeMount = (monaco: any) => {
+    monaco.editor.defineTheme('light', {
+      base: 'vs',
+      inherit: true,
+      rules: [
+        { token: 'comment', foreground: '64748b', fontStyle: 'italic' },
+        { token: 'keyword', foreground: '2563eb', fontStyle: 'bold' },
+        { token: 'string', foreground: '059669' },
+        { token: 'number', foreground: 'd97706' },
+      ],
+      colors: {
+        'editor.background': '#ffffff',
+        'editor.foreground': '#0f172a',
+        'editorLineNumber.foreground': '#94a3b8',
+        'editorLineNumber.activeForeground': '#2563eb',
+        'editor.lineHighlightBackground': '#f8fafc',
+        'editor.selectionBackground': '#bfdbfe80',
+        'editorCursor.foreground': '#2563eb',
+      },
+    });
+
+    monaco.editor.defineTheme('vs-dark', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: 'comment', foreground: '64748b', fontStyle: 'italic' },
+        { token: 'keyword', foreground: '38bdf8', fontStyle: 'bold' },
+        { token: 'string', foreground: '34d399' },
+        { token: 'number', foreground: 'fbbf24' },
+      ],
+      colors: {
+        'editor.background': '#020817',
+        'editor.foreground': '#f8fafc',
+        'editorLineNumber.foreground': '#475569',
+        'editorLineNumber.activeForeground': '#38bdf8',
+        'editor.lineHighlightBackground': '#0f172a80',
+        'editor.selectionBackground': '#1e3a8a60',
+        'editorCursor.foreground': '#38bdf8',
+      },
+    });
   };
 
   // Editor settings
@@ -99,10 +145,62 @@ export function OnlineIde() {
   const ideContainerRef = useRef<HTMLDivElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // ── Load Guest Workspace from LocalStorage / Fallback Defaults ─────────
+  const loadGuestWorkspace = useCallback(() => {
+    setActiveProjectId(null);
+    setActiveProjectName('Guest Playground');
+
+    try {
+      const savedLangId = localStorage.getItem(LOCAL_STORAGE_LANG);
+      const initialLang =
+        IDE_LANGUAGES.find((l) => l.id === Number(savedLangId)) || IDE_LANGUAGES[0];
+      setSelectedLanguage(initialLang);
+
+      const savedFilesJson = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (savedFilesJson) {
+        const parsed = JSON.parse(savedFilesJson) as IdeFile[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setFiles(parsed);
+          setActiveFileId(parsed[0].id);
+          return;
+        }
+      }
+
+      const initialFile: IdeFile = {
+        id: 'file-1',
+        name: initialLang.defaultFilename,
+        languageId: initialLang.id,
+        content: initialLang.starterCode,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      setFiles([initialFile]);
+      setActiveFileId(initialFile.id);
+    } catch {
+      const initialLang = IDE_LANGUAGES[0];
+      const initialFile: IdeFile = {
+        id: 'file-1',
+        name: initialLang.defaultFilename,
+        languageId: initialLang.id,
+        content: initialLang.starterCode,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      setFiles([initialFile]);
+      setActiveFileId(initialFile.id);
+    }
+  }, []);
+
   // ── Load Workspace & Projects from Backend / LocalStorage ──────────────
   const loadWorkspace = useCallback(async () => {
+    // If not authenticated, do not query the server workspace API.
+    if (!user) {
+      loadGuestWorkspace();
+      return;
+    }
+
     try {
-      // 1. Try server workspace
+      // 1. Try server workspace for logged-in user
       const res = await ideApi.getWorkspace();
       const workspace = res.data.data;
       if (workspace && workspace.project) {
@@ -153,47 +251,8 @@ export function OnlineIde() {
       // Fallback to local storage for guest or offline mode
     }
 
-    // LocalStorage fallback
-    try {
-      const savedLangId = localStorage.getItem(LOCAL_STORAGE_LANG);
-      const initialLang =
-        IDE_LANGUAGES.find((l) => l.id === Number(savedLangId)) || IDE_LANGUAGES[0];
-      setSelectedLanguage(initialLang);
-
-      const savedFilesJson = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (savedFilesJson) {
-        const parsed = JSON.parse(savedFilesJson) as IdeFile[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setFiles(parsed);
-          setActiveFileId(parsed[0].id);
-          return;
-        }
-      }
-
-      const initialFile: IdeFile = {
-        id: 'file-1',
-        name: initialLang.defaultFilename,
-        languageId: initialLang.id,
-        content: initialLang.starterCode,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      };
-      setFiles([initialFile]);
-      setActiveFileId(initialFile.id);
-    } catch {
-      const initialLang = IDE_LANGUAGES[0];
-      const initialFile: IdeFile = {
-        id: 'file-1',
-        name: initialLang.defaultFilename,
-        languageId: initialLang.id,
-        content: initialLang.starterCode,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      };
-      setFiles([initialFile]);
-      setActiveFileId(initialFile.id);
-    }
-  }, []);
+    loadGuestWorkspace();
+  }, [user, loadGuestWorkspace]);
 
   useEffect(() => {
     loadWorkspace();
@@ -201,6 +260,7 @@ export function OnlineIde() {
 
   // Load specific project on selection
   const handleSelectProject = async (projectId: string) => {
+    if (!user) return;
     try {
       const res = await ideApi.getProject(projectId);
       const proj = res.data.data;
@@ -260,7 +320,7 @@ export function OnlineIde() {
       } catch {}
 
       // 2. Server save if active project exists
-      if (activeProjectId && fileToSave) {
+      if (user && activeProjectId && fileToSave && !fileToSave.id.startsWith('file-')) {
         setSaveStatus('saving');
         ideApi
           .updateFile(activeProjectId, fileToSave.id, {
@@ -277,7 +337,7 @@ export function OnlineIde() {
         setSaveStatus('saved');
       }
     },
-    [activeProjectId]
+    [user, activeProjectId]
   );
 
   // Editor content update with debounce
@@ -317,7 +377,7 @@ export function OnlineIde() {
         setFiles(updatedFiles);
         setActiveFileId(newFile.id);
 
-        if (activeProjectId) {
+        if (user && activeProjectId) {
           ideApi
             .createFile(activeProjectId, {
               fileName: newFile.name,
@@ -358,7 +418,7 @@ export function OnlineIde() {
     setFiles((prev) => [...prev, newFile]);
     setActiveFileId(newFile.id);
 
-    if (activeProjectId) {
+    if (user && activeProjectId) {
       ideApi
         .createFile(activeProjectId, {
           fileName: newName,
@@ -387,7 +447,7 @@ export function OnlineIde() {
       setActiveFileId(remaining[0].id);
     }
 
-    if (activeProjectId && !fileId.startsWith('file-')) {
+    if (user && activeProjectId && !fileId.startsWith('file-')) {
       ideApi.deleteFile(activeProjectId, fileId).catch(() => {});
     }
   };
@@ -398,7 +458,7 @@ export function OnlineIde() {
       prev.map((f) => (f.id === fileId ? { ...f, name: newName, updatedAt: Date.now() } : f))
     );
 
-    if (activeProjectId && !fileId.startsWith('file-')) {
+    if (user && activeProjectId && !fileId.startsWith('file-')) {
       ideApi.updateFile(activeProjectId, fileId, { fileName: newName }).catch(() => {});
     }
   };
@@ -826,6 +886,7 @@ export function OnlineIde() {
             <MonacoEditor
               height="100%"
               theme={currentTheme}
+              beforeMount={handleEditorBeforeMount}
               language={selectedLanguage.monacoLang}
               value={activeFile?.content || ''}
               onChange={handleEditorChange}

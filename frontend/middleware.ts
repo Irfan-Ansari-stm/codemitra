@@ -16,17 +16,26 @@ const workspaceRoutes = new Set([
 const reservedPrefixes = new Set([
   'about',
   'api',
+  'apply-institution',
   'blog',
   'contact',
+  'cookies',
   'courses',
   'dashboard',
+  'faqs',
   'forgot-password',
+  'ide',
   'institution',
   'login',
   'my-learning',
+  'platform',
+  'privacy',
   'problems',
   'register',
+  'resources',
+  'status',
   'super-admin',
+  'terms',
 ]);
 
 export function middleware(request: NextRequest) {

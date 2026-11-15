@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Database, HardDrive, Server,
-  CheckCircle2, Clock, RefreshCw, Zap, ShieldCheck
+  CheckCircle2, Clock, RefreshCw, Zap, ShieldCheck, AlertCircle, PlayCircle
 } from 'lucide-react';
 import { superAdminMonitoringApi } from '@/lib/api';
 
@@ -24,15 +24,47 @@ function formatUptime(seconds: number): string {
 }
 
 export default function SuperAdminMonitoringPage() {
+  const queryClient = useQueryClient();
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [checkingServiceId, setCheckingServiceId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  const healthQuery = useQuery({
-    queryKey: ['super-admin-monitoring-health'],
-    queryFn: () => superAdminMonitoringApi.health().then((res) => res.data?.data || {}),
+  const monitoringQuery = useQuery({
+    queryKey: ['super-admin-monitoring-overview'],
+    queryFn: () =>
+      superAdminMonitoringApi
+        .overview()
+        .then((res) => res.data?.data)
+        .catch(() => superAdminMonitoringApi.health().then((res) => res.data?.data || {})),
     refetchInterval: autoRefresh ? 10000 : false,
   });
 
-  const data = healthQuery.data || {};
+  const checkMutation = useMutation({
+    mutationFn: (id: string) => superAdminMonitoringApi.checkService(id),
+    onMutate: (id) => {
+      setCheckingServiceId(id);
+    },
+    onSuccess: (res) => {
+      setCheckingServiceId(null);
+      const svc = res.data?.data;
+      setFeedback({
+        text: `Health probe completed for ${svc?.name || 'service'}: ${svc?.status?.toUpperCase()} (${svc?.latencyMs ?? 0}ms)`,
+        type: 'success',
+      });
+      void queryClient.invalidateQueries({ queryKey: ['super-admin-monitoring-overview'] });
+      setTimeout(() => setFeedback(null), 4000);
+    },
+    onError: (err: any) => {
+      setCheckingServiceId(null);
+      setFeedback({
+        text: err?.response?.data?.error?.message || 'Failed to ping service probe.',
+        type: 'error',
+      });
+      setTimeout(() => setFeedback(null), 4000);
+    },
+  });
+
+  const data = monitoringQuery.data || {};
   const db = data.database || {};
   const memory = data.memory || {};
   const system = data.system || {};
@@ -41,6 +73,8 @@ export default function SuperAdminMonitoringPage() {
   const heapPercent = memory.heapTotalMb
     ? Math.min(100, Math.round((memory.heapUsedMb / memory.heapTotalMb) * 100))
     : 0;
+
+  const isDegraded = data.status === 'degraded' || (db.status && db.status !== 'operational');
 
   return (
     <div className="space-y-6">
@@ -66,30 +100,63 @@ export default function SuperAdminMonitoringPage() {
             Auto-refresh (10s)
           </label>
           <button
-            onClick={() => healthQuery.refetch()}
-            disabled={healthQuery.isFetching}
+            onClick={() => monitoringQuery.refetch()}
+            disabled={monitoringQuery.isFetching}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
           >
-            <RefreshCw className={`h-4 w-4 ${healthQuery.isFetching ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${monitoringQuery.isFetching ? 'animate-spin' : ''}`} />
             Refresh
           </button>
         </div>
       </div>
 
+      {/* Feedback Toast */}
+      {feedback && (
+        <div
+          className={`flex items-center gap-2 rounded-lg border p-4 text-sm font-medium transition ${
+            feedback.type === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+              : 'border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200'
+          }`}
+        >
+          {feedback.type === 'success' ? (
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+          ) : (
+            <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+          )}
+          <span>{feedback.text}</span>
+        </div>
+      )}
+
       {/* Main Status Banner */}
-      <div className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent p-5 dark:border-emerald-800/40">
+      <div
+        className={`rounded-xl border p-5 ${
+          isDegraded
+            ? 'border-amber-200 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent dark:border-amber-800/40'
+            : 'border-emerald-200 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent dark:border-emerald-800/40'
+        }`}
+      >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <div className="relative flex h-3 w-3">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" />
+              <span
+                className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${
+                  isDegraded ? 'bg-amber-400' : 'bg-emerald-400'
+                }`}
+              />
+              <span
+                className={`relative inline-flex h-3 w-3 rounded-full ${
+                  isDegraded ? 'bg-amber-500' : 'bg-emerald-500'
+                }`}
+              />
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                All Core Platform Systems Operational
+                {isDegraded ? 'Platform Operating in Degraded State' : 'All Core Platform Systems Operational'}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Last checked: {data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : 'Connecting...'}
+                Last telemetry probe:{' '}
+                {data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : 'Connecting...'}
               </p>
             </div>
           </div>
@@ -163,7 +230,7 @@ export default function SuperAdminMonitoringPage() {
             Node {system.nodeVersion || 'v20+'}
           </div>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Platform: {system.platform || 'linux'} ({system.arch || 'x64'}) &bull; {system.env}
+            Platform: {system.platform || 'windows'} ({system.arch || 'x64'}) &bull; {system.env || 'production'}
           </p>
         </div>
 
@@ -176,9 +243,9 @@ export default function SuperAdminMonitoringPage() {
             </div>
           </div>
           <div className="mt-3 text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-            {services.length} / {services.length} Healthy
+            {services.filter((s: any) => s.status === 'operational').length} / {services.length || 5} Healthy
           </div>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">100% services operational</p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">100% core subsystems online</p>
         </div>
       </div>
 
@@ -198,31 +265,57 @@ export default function SuperAdminMonitoringPage() {
                 <th className="px-6 py-3">Status</th>
                 <th className="px-6 py-3">Probe Latency</th>
                 <th className="px-6 py-3">Uptime Target</th>
+                <th className="px-6 py-3 text-right">Manual Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {services.map((svc: any, idx: number) => (
-                <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2.5 font-medium text-slate-900 dark:text-white">
-                      <Zap className="h-4 w-4 text-indigo-500" />
-                      {svc.name}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                      <CheckCircle2 className="h-3 w-3" />
-                      {svc.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 font-mono text-xs text-slate-600 dark:text-slate-300">
-                    {svc.latencyMs} ms
-                  </td>
-                  <td className="px-6 py-4 text-xs font-medium text-slate-500">
-                    99.95% SLA
-                  </td>
-                </tr>
-              ))}
+              {services.map((svc: any) => {
+                const isChecking = checkingServiceId === svc.id;
+                return (
+                  <tr key={svc.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2.5 font-medium text-slate-900 dark:text-white">
+                        <Zap className="h-4 w-4 text-indigo-500" />
+                        <div>
+                          <div>{svc.name}</div>
+                          {svc.serviceType && (
+                            <span className="text-xs text-slate-400">Type: {svc.serviceType}</span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                          svc.status === 'operational' || svc.status === 'healthy'
+                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                            : 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                        }`}
+                      >
+                        <CheckCircle2 className="h-3 w-3" />
+                        {svc.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 font-mono text-xs text-slate-600 dark:text-slate-300">
+                      {svc.latencyMs ?? 0} ms
+                    </td>
+                    <td className="px-6 py-4 text-xs font-medium text-slate-500">
+                      {svc.uptimeTarget || '99.95% SLA'}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        onClick={() => checkMutation.mutate(svc.id)}
+                        disabled={isChecking}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                        title="Execute on-demand health check probe"
+                      >
+                        <PlayCircle className={`h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 ${isChecking ? 'animate-spin' : ''}`} />
+                        {isChecking ? 'Checking...' : 'Run Probe'}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -230,4 +323,3 @@ export default function SuperAdminMonitoringPage() {
     </div>
   );
 }
-

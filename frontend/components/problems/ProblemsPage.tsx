@@ -155,11 +155,13 @@ export default function ProblemsPage({ embedded = false }: { embedded?: boolean 
         : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900 dark:border-white/10 dark:bg-white/5 dark:text-slate-400 dark:hover:border-white/20 dark:hover:text-slate-200'
     );
 
-  const problemBasePath = user?.role === 'general_student'
-    ? '/dashboard/problems'
-    : user?.role === 'super_admin'
-      ? '/super-admin/problems'
-      : institutionHref('/institution/problems', tenantQuery.data?.slug);
+  const problemBasePath = !user
+    ? '/problems'
+    : user?.role === 'general_student'
+      ? '/dashboard/problems'
+      : user?.role === 'super_admin'
+        ? '/super-admin/problems'
+        : institutionHref('/institution/problems', tenantQuery.data?.slug);
   const PageContainer = embedded ? 'div' : 'main';
 
   return (
@@ -441,7 +443,9 @@ export default function ProblemsPage({ embedded = false }: { embedded?: boolean 
           <section aria-label="Problem results" className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {problems.map((problem) => {
               const rate = acceptanceRate(problem);
-              const solveHref = `${problemBasePath}/${problem.id}/solve`;
+              const solveHref = !user
+                ? `/problems/${problem.id}`
+                : `${problemBasePath}/${problem.id}/solve`;
               return (
                 <article
                   key={problem.id}

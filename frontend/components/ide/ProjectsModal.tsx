@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuthStore } from '@/store/authStore';
 import {
   Folder,
   FolderPlus,
@@ -28,6 +30,7 @@ export function ProjectsModal({
   activeProjectId,
   onSelectProject,
 }: ProjectsModalProps) {
+  const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
   const [isCreating, setIsCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -49,7 +52,7 @@ export function ProjectsModal({
         return [];
       }
     },
-    enabled: isOpen,
+    enabled: isOpen && !!user,
   });
 
   const createMutation = useMutation({

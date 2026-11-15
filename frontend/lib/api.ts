@@ -82,8 +82,25 @@ api.interceptors.response.use(
             if (typeof window !== 'undefined') {
               useAuthStore.getState().clear();
               const path = window.location.pathname;
-              const isPublicPage = path === '/' || path === '/problems' || path.startsWith('/blog') ||
-                path === '/login' || path === '/register' || path === '/forgot-password';
+              const isPublicPage =
+                path === '/' ||
+                path.startsWith('/login') ||
+                path.startsWith('/register') ||
+                path.startsWith('/forgot-password') ||
+                path.startsWith('/ide') ||
+                path.startsWith('/platform') ||
+                path.startsWith('/problems') ||
+                path.startsWith('/courses') ||
+                path.startsWith('/blog') ||
+                path.startsWith('/about') ||
+                path.startsWith('/contact') ||
+                path.startsWith('/faqs') ||
+                path.startsWith('/resources') ||
+                path.startsWith('/status') ||
+                path.startsWith('/terms') ||
+                path.startsWith('/privacy') ||
+                path.startsWith('/cookies') ||
+                path.startsWith('/apply-institution');
               if (!isPublicPage) window.location.href = '/login';
             }
             throw refreshError;
@@ -194,6 +211,95 @@ export const ticketApi = {
   delete: (id: string) => api.delete<ApiResponse<any>>(`/tickets/${id}`),
 };
 
+export const superAdminSupportApi = {
+  getStatistics: () =>
+    api.get<ApiResponse<{
+      totalTickets: number;
+      openTickets: number;
+      inProgressTickets: number;
+      resolvedTickets: number;
+      closedTickets: number;
+      resolvedOrClosedTickets: number;
+      urgentTickets: number;
+      overdueTickets: number;
+      averageFirstResponseTime: string;
+      averageResolutionTime: string;
+    }>>('/super-admin/support/statistics'),
+
+  listTickets: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+    priority?: string;
+    category?: string;
+    assignedTo?: string;
+    institutionId?: string;
+    startDate?: string;
+    endDate?: string;
+    sortBy?: string;
+    sortOrder?: string;
+  }) => api.get<ApiResponse<any>>('/super-admin/support/tickets', { params }),
+
+  getTicket: (id: string) =>
+    api.get<ApiResponse<any>>(`/super-admin/support/tickets/${id}`),
+
+  createTicket: (data: {
+    userId: string;
+    subject: string;
+    description: string;
+    category?: string;
+    priority?: string;
+    department?: string;
+    assignedTo?: string;
+    tenantId?: string;
+  }) => api.post<ApiResponse<any>>('/super-admin/support/tickets', data),
+
+  updateTicket: (id: string, data: any) =>
+    api.patch<ApiResponse<any>>(`/super-admin/support/tickets/${id}`, data),
+
+  deleteTicket: (id: string) =>
+    api.delete<ApiResponse<any>>(`/super-admin/support/tickets/${id}`),
+
+  getMessages: (id: string) =>
+    api.get<ApiResponse<any[]>>(`/super-admin/support/tickets/${id}/messages`),
+
+  reply: (id: string, message: string, attachments?: any[]) =>
+    api.post<ApiResponse<any>>(`/super-admin/support/tickets/${id}/messages`, { message, attachments }),
+
+  addInternalNote: (id: string, note: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/support/tickets/${id}/internal-notes`, { note }),
+
+  getAgents: () =>
+    api.get<ApiResponse<any[]>>('/super-admin/support/agents'),
+
+  assignTicket: (id: string, assignedTo: string, note?: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/support/tickets/${id}/assign`, { assignedTo, note }),
+
+  getAssignmentHistory: (id: string) =>
+    api.get<ApiResponse<any[]>>(`/super-admin/support/tickets/${id}/assignment-history`),
+
+  updateStatus: (id: string, status: string) =>
+    api.patch<ApiResponse<any>>(`/super-admin/support/tickets/${id}/status`, { status }),
+
+  updatePriority: (id: string, priority: string) =>
+    api.patch<ApiResponse<any>>(`/super-admin/support/tickets/${id}/priority`, { priority }),
+
+  escalate: (id: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/support/tickets/${id}/escalate`),
+
+  reopen: (id: string, reason?: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/support/tickets/${id}/reopen`, { reason }),
+
+  getActivity: (id: string) =>
+    api.get<ApiResponse<any[]>>(`/super-admin/support/tickets/${id}/activity`),
+
+  exportCSVUrl: (params?: any) => {
+    const searchParams = new URLSearchParams(params);
+    return `/api/v1/super-admin/support/export?${searchParams.toString()}`;
+  },
+};
+
 export const academicApi = {
   // Academic years
   getYears: () => api.get<ApiResponse<any>>('/academic/years'),
@@ -249,51 +355,44 @@ export const certificateApi = {
 };
 
 export const contentApi = {
+  // Stats
+  getStats: () => api.get<ApiResponse<any>>('/super-admin/content/stats'),
   // Pages
-  listPages: (status?: string, pageType?: string, page = 1, limit = 20) =>
-    api.get<ApiResponse<any>>('/super-admin/content/pages', { params: { status, pageType, page, limit } }),
+  listPages: (params?: any) =>
+    api.get<ApiResponse<any>>('/super-admin/content/pages', { params }),
+  getPage: (id: string) => api.get<ApiResponse<any>>(`/super-admin/content/pages/${id}`),
   createPage: (data: any) => api.post<ApiResponse<any>>('/super-admin/content/pages', data),
-  updatePage: (id: string, data: any) => api.patch<ApiResponse<any>>(`/super-admin/content/pages/${id}`, data),
+  updatePage: (id: string, data: any) => api.put<ApiResponse<any>>(`/super-admin/content/pages/${id}`, data),
   deletePage: (id: string) => api.delete<ApiResponse<any>>(`/super-admin/content/pages/${id}`),
   getPageBySlug: (slug: string) => api.get<ApiResponse<any>>(`/content/pages/${slug}`),
+  getRevisions: (id: string) => api.get<ApiResponse<any>>(`/super-admin/content/pages/${id}/revisions`),
+  restoreRevision: (id: string, revId: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/content/pages/${id}/revisions/${revId}/restore`),
   // Banners
-  listBanners: (page = 1, limit = 20) =>
-    api.get<ApiResponse<any>>('/super-admin/content/banners', { params: { page, limit } }),
+  listBanners: (params?: any) =>
+    api.get<ApiResponse<any>>('/super-admin/content/banners', { params }),
   createBanner: (data: any) => api.post<ApiResponse<any>>('/super-admin/content/banners', data),
-  updateBanner: (id: string, data: any) => api.patch<ApiResponse<any>>(`/super-admin/content/banners/${id}`, data),
+  updateBanner: (id: string, data: any) => api.put<ApiResponse<any>>(`/super-admin/content/banners/${id}`, data),
   deleteBanner: (id: string) => api.delete<ApiResponse<any>>(`/super-admin/content/banners/${id}`),
   getActiveBanners: () => api.get<ApiResponse<any>>('/content/banners'),
   // FAQs
-  listFaqs: () => api.get<ApiResponse<any>>('/super-admin/content/faqs'),
+  listFaqs: (params?: any) => api.get<ApiResponse<any>>('/super-admin/content/faqs', { params }),
   createFaq: (data: any) => api.post<ApiResponse<any>>('/super-admin/content/faqs', data),
-  updateFaq: (id: string, data: any) => api.patch<ApiResponse<any>>(`/super-admin/content/faqs/${id}`, data),
+  updateFaq: (id: string, data: any) => api.put<ApiResponse<any>>(`/super-admin/content/faqs/${id}`, data),
   deleteFaq: (id: string) => api.delete<ApiResponse<any>>(`/super-admin/content/faqs/${id}`),
   getPublicFaqs: () => api.get<ApiResponse<any>>('/content/faqs'),
   // Help center
-  listHelpArticles: () => api.get<ApiResponse<any>>('/super-admin/help-center'),
-  createHelpArticle: (data: any) => api.post<ApiResponse<any>>('/super-admin/help-center', data),
-  updateHelpArticle: (id: string, data: any) => api.patch<ApiResponse<any>>(`/super-admin/help-center/${id}`, data),
-  deleteHelpArticle: (id: string) => api.delete<ApiResponse<any>>(`/super-admin/help-center/${id}`),
-  getPublicHelpArticles: () => api.get<ApiResponse<any>>('/help-center'),
-  getHelpArticleBySlug: (slug: string) => api.get<ApiResponse<any>>(`/help-center/${slug}`),
+  listHelpArticles: (params?: any) => api.get<ApiResponse<any>>('/super-admin/help-center/articles', { params }),
+  createHelpArticle: (data: any) => api.post<ApiResponse<any>>('/super-admin/help-center/articles', data),
+  updateHelpArticle: (id: string, data: any) => api.put<ApiResponse<any>>(`/super-admin/help-center/articles/${id}`, data),
+  deleteHelpArticle: (id: string) => api.delete<ApiResponse<any>>(`/super-admin/help-center/articles/${id}`),
+  getPublicHelpArticles: () => api.get<ApiResponse<any>>('/help-center/articles'),
+  getHelpArticleBySlug: (slug: string) => api.get<ApiResponse<any>>(`/help-center/articles/${slug}`),
   // Media
   listMedia: (page = 1, limit = 20) =>
     api.get<ApiResponse<any>>('/super-admin/files', { params: { page, limit } }),
   uploadMedia: (data: any) => api.post<ApiResponse<any>>('/super-admin/files', data),
   deleteMedia: (id: string) => api.delete<ApiResponse<any>>(`/super-admin/files/${id}`),
-};
-
-export const configurationApi = {
-  getAll: () => api.get<ApiResponse<any>>('/super-admin/configuration'),
-  getByKey: (key: string) => api.get<ApiResponse<any>>(`/super-admin/configuration/${key}`),
-  update: (key: string, value: any) =>
-    api.put<ApiResponse<any>>(`/super-admin/configuration/${key}`, { value }),
-  updateBulk: (configs: any) => api.put<ApiResponse<any>>('/super-admin/configuration', configs),
-  getHistory: (page = 1, limit = 50) =>
-    api.get<ApiResponse<any>>('/super-admin/configuration/history', { params: { page, limit } }),
-  getFeatureFlags: () => api.get<ApiResponse<any>>('/super-admin/feature-flags'),
-  updateFeatureFlag: (key: string, data: any) =>
-    api.patch<ApiResponse<any>>(`/super-admin/feature-flags/${key}`, data),
 };
 
 export const seoApi = {
@@ -303,11 +402,64 @@ export const seoApi = {
     api.get<ApiResponse<any>>(`/super-admin/seo/metadata/${entityType}/${entityId}`),
   setEntityMetadata: (entityType: string, entityId: string, data: any) =>
     api.put<ApiResponse<any>>(`/super-admin/seo/metadata/${entityType}/${entityId}`, data),
-  getRedirects: (page = 1, limit = 20) =>
-    api.get<ApiResponse<any>>('/super-admin/seo/redirects', { params: { page, limit } }),
+  getRedirects: (params?: any) =>
+    api.get<ApiResponse<any>>('/super-admin/seo/redirects', { params }),
   createRedirect: (data: any) => api.post<ApiResponse<any>>('/super-admin/seo/redirects', data),
   deleteRedirect: (id: string) => api.delete<ApiResponse<any>>(`/super-admin/seo/redirects/${id}`),
   generateSitemap: () => api.get<ApiResponse<any>>('/super-admin/seo/sitemap'),
+  getAudit: () => api.get<ApiResponse<any>>('/super-admin/seo/audit'),
+};
+
+export const helpCenterApi = {
+  getStats: () => api.get<ApiResponse<any>>('/super-admin/help-center/stats'),
+  listCategories: () => api.get<ApiResponse<any>>('/super-admin/help-center/categories'),
+  createCategory: (data: any) => api.post<ApiResponse<any>>('/super-admin/help-center/categories', data),
+  updateCategory: (id: string, data: any) => api.put<ApiResponse<any>>(`/super-admin/help-center/categories/${id}`, data),
+  deleteCategory: (id: string) => api.delete<ApiResponse<any>>(`/super-admin/help-center/categories/${id}`),
+  listArticles: (params?: any) => api.get<ApiResponse<any>>('/super-admin/help-center/articles', { params }),
+  getArticle: (id: string) => api.get<ApiResponse<any>>(`/super-admin/help-center/articles/${id}`),
+  createArticle: (data: any) => api.post<ApiResponse<any>>('/super-admin/help-center/articles', data),
+  updateArticle: (id: string, data: any) => api.put<ApiResponse<any>>(`/super-admin/help-center/articles/${id}`, data),
+  deleteArticle: (id: string) => api.delete<ApiResponse<any>>(`/super-admin/help-center/articles/${id}`),
+  getRevisions: (id: string) => api.get<ApiResponse<any>>(`/super-admin/help-center/articles/${id}/revisions`),
+  restoreRevision: (id: string, revId: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/help-center/articles/${id}/revisions/${revId}/restore`),
+  getPublicArticles: (params?: any) => api.get<ApiResponse<any>>('/help-center/articles', { params }),
+  getPublicArticleBySlug: (slug: string) => api.get<ApiResponse<any>>(`/help-center/articles/${slug}`),
+  submitFeedback: (id: string, isHelpful: boolean, feedbackText?: string) =>
+    api.post<ApiResponse<any>>(`/help-center/articles/${id}/feedback`, { isHelpful, feedbackText }),
+};
+
+export const communityAdminApi = {
+  getStats: () => api.get<ApiResponse<any>>('/super-admin/community/analytics'),
+  listCategories: () => api.get<ApiResponse<any>>('/super-admin/community/categories'),
+  createCategory: (data: any) => api.post<ApiResponse<any>>('/super-admin/community/categories', data),
+  updateCategory: (id: string, data: any) => api.put<ApiResponse<any>>(`/super-admin/community/categories/${id}`, data),
+  listThreads: (params?: any) => api.get<ApiResponse<any>>('/super-admin/community/threads', { params }),
+  getThread: (id: string) => api.get<ApiResponse<any>>(`/super-admin/community/threads/${id}`),
+  createThread: (data: any) => api.post<ApiResponse<any>>('/super-admin/community/threads', data),
+  updateThread: (id: string, data: any) => api.patch<ApiResponse<any>>(`/super-admin/community/threads/${id}`, data),
+  deleteThread: (id: string) => api.delete<ApiResponse<any>>(`/super-admin/community/threads/${id}`),
+  createReply: (threadId: string, content: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/community/threads/${threadId}/replies`, { content }),
+  updateReply: (id: string, data: any) => api.patch<ApiResponse<any>>(`/super-admin/community/replies/${id}`, data),
+  deleteReply: (id: string) => api.delete<ApiResponse<any>>(`/super-admin/community/replies/${id}`),
+  listReports: (params?: any) => api.get<ApiResponse<any>>('/super-admin/community/reports', { params }),
+  resolveReport: (id: string, action: string, resolutionNote?: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/community/reports/${id}/resolve`, { action, resolutionNote }),
+};
+
+export const blogAdminApi = {
+  getStats: () => api.get<ApiResponse<any>>('/super-admin/blog/stats'),
+  listArticles: (params?: any) => api.get<ApiResponse<any>>('/super-admin/blog/articles', { params }),
+  getArticle: (id: string) => api.get<ApiResponse<any>>(`/super-admin/blog/articles/${id}`),
+  createArticle: (data: any) => api.post<ApiResponse<any>>('/super-admin/blog/articles', data),
+  updateArticle: (id: string, data: any) => api.put<ApiResponse<any>>(`/super-admin/blog/articles/${id}`, data),
+  deleteArticle: (id: string) => api.delete<ApiResponse<any>>(`/super-admin/blog/articles/${id}`),
+  listCategories: () => api.get<ApiResponse<any>>('/super-admin/blog/categories'),
+  createCategory: (data: any) => api.post<ApiResponse<any>>('/super-admin/blog/categories', data),
+  updateCategory: (id: string, data: any) => api.put<ApiResponse<any>>(`/super-admin/blog/categories/${id}`, data),
+  deleteCategory: (id: string) => api.delete<ApiResponse<any>>(`/super-admin/blog/categories/${id}`),
 };
 
 export const logsApi = {
@@ -916,12 +1068,96 @@ export const superAdminStudentsApi = {
 
 export const superAdminApprovalsApi = {
   get: () => api.get<ApiResponse<any>>('/super-admin/approvals'),
+  getSummary: () => api.get<ApiResponse<{ counts: any }>>('/super-admin/approvals/summary'),
+
+  // Institutes
+  listInstitutes: (params?: { search?: string; status?: string; page?: number; limit?: number; sortBy?: string; sortOrder?: string }) =>
+    api.get<ApiResponse<any>>('/super-admin/approvals/institutes', { params }),
+  getInstitute: (id: string) =>
+    api.get<ApiResponse<any>>(`/super-admin/approvals/institutes/${id}`),
+  approveInstitute: (id: string, note?: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/approvals/institutes/${id}/approve`, { note }),
+  rejectInstitute: (id: string, reason: string, adminNotes?: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/approvals/institutes/${id}/reject`, { reason, adminNotes }),
+  requestInstituteChanges: (id: string, comments: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/approvals/institutes/${id}/request-changes`, { comments }),
+
+  // Admissions
+  listAdmissions: (params?: { search?: string; status?: string; tenantId?: string; page?: number; limit?: number; sortBy?: string; sortOrder?: string }) =>
+    api.get<ApiResponse<any>>('/super-admin/approvals/admissions', { params }),
+  getAdmission: (id: string) =>
+    api.get<ApiResponse<any>>(`/super-admin/approvals/admissions/${id}`),
+  approveAdmission: (id: string, note?: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/approvals/admissions/${id}/approve`, { note }),
+  rejectAdmission: (id: string, reason: string, adminNotes?: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/approvals/admissions/${id}/reject`, { reason, adminNotes }),
+  requestAdmissionChanges: (id: string, comments: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/approvals/admissions/${id}/request-changes`, { comments }),
+
+  // Courses
+  listCourses: (params?: { search?: string; status?: string; tenantId?: string; page?: number; limit?: number; sortBy?: string; sortOrder?: string }) =>
+    api.get<ApiResponse<any>>('/super-admin/approvals/courses', { params }),
+  getCourse: (id: string) =>
+    api.get<ApiResponse<any>>(`/super-admin/approvals/courses/${id}`),
+  approveCourse: (id: string, note?: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/approvals/courses/${id}/approve`, { note }),
+  rejectCourse: (id: string, reason: string, adminNotes?: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/approvals/courses/${id}/reject`, { reason, adminNotes }),
+  requestCourseChanges: (id: string, comments: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/approvals/courses/${id}/request-changes`, { comments }),
+
+  // Audit History
+  getHistory: (params?: { entityType?: string; entityId?: string }) =>
+    api.get<ApiResponse<any[]>>('/super-admin/approvals/history', { params }),
 };
 
 export const superAdminSecurityApi = {
   overview: () => api.get<ApiResponse<any>>('/super-admin/security/overview'),
+  sessions: (params?: { search?: string; role?: string; limit?: number; page?: number }) =>
+    api.get<ApiResponse<any>>('/super-admin/security/sessions', { params }),
+  session: (id: string) => api.get<ApiResponse<any>>(`/super-admin/security/sessions/${id}`),
   revokeSession: (id: string) => api.post<ApiResponse<any>>(`/super-admin/security/sessions/${id}/revoke`),
-  unlockUser: (id: string) => api.post<ApiResponse<any>>(`/super-admin/security/users/${id}/unlock`),
+  revokeUserSessions: (userId: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/security/users/${userId}/revoke-sessions`),
+  lockedAccounts: (params?: { search?: string; status?: string; limit?: number; page?: number }) =>
+    api.get<ApiResponse<any>>('/super-admin/security/locked-accounts', { params }),
+  unlockUser: (userId: string, reason?: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/security/users/${userId}/unlock`, { reason }),
+  failedLogins: (hours?: number) =>
+    api.get<ApiResponse<any>>('/super-admin/security/failed-logins', { params: { hours } }),
+  controls: () => api.get<ApiResponse<any>>('/super-admin/security/controls'),
+  updateControl: (id: string, data: { isEnabled?: boolean; config?: any }) =>
+    api.patch<ApiResponse<any>>(`/super-admin/security/controls/${id}`, data),
+  compliance: () => api.get<ApiResponse<any>>('/super-admin/security/compliance'),
+};
+
+export const executionAdminApi = {
+  overview: () => api.get<ApiResponse<any>>('/super-admin/execution/overview'),
+  languages: () => api.get<ApiResponse<any>>('/super-admin/execution/languages'),
+  createLanguage: (data: any) => api.post<ApiResponse<any>>('/super-admin/execution/languages', data),
+  updateLanguage: (id: number, data: any) =>
+    api.patch<ApiResponse<any>>(`/super-admin/execution/languages/${id}`, data),
+  nodes: () => api.get<ApiResponse<any>>('/super-admin/execution/nodes'),
+  nodeHealthCheck: (id: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/execution/nodes/${id}/health-check`),
+  limits: () => api.get<ApiResponse<any>>('/super-admin/execution/limits'),
+  updateLimits: (tier: string, data: any) =>
+    api.put<ApiResponse<any>>(`/super-admin/execution/limits/${tier}`, data),
+  metrics: () => api.get<ApiResponse<any>>('/super-admin/execution/metrics'),
+  history: (limit?: number) =>
+    api.get<ApiResponse<any>>('/super-admin/execution/history', { params: { limit } }),
+};
+
+export const logsAdminApi = {
+  audit: (params?: { page?: number; limit?: number; action?: string; resourceType?: string; search?: string }) =>
+    api.get<ApiResponse<any>>('/super-admin/logs/audit', { params }),
+  auditById: (id: string | number) => api.get<ApiResponse<any>>(`/super-admin/logs/audit/${id}`),
+  application: (params?: { page?: number; limit?: number; level?: string; source?: string; search?: string }) =>
+    api.get<ApiResponse<any>>('/super-admin/logs/application', { params }),
+  authentication: (params?: { page?: number; limit?: number; eventType?: string; status?: string; search?: string }) =>
+    api.get<ApiResponse<any>>('/super-admin/logs/authentication', { params }),
+  export: (type: string, params?: any) =>
+    api.get<string>(`/super-admin/logs/export`, { params: { type, ...params }, responseType: 'blob' as any }),
 };
 
 export const superAdminBillingApi = {
@@ -940,9 +1176,23 @@ export const superAdminIncidentsApi = {
 
 export const superAdminIntegrationsApi = {
   overview: () => api.get<ApiResponse<any>>('/super-admin/integrations/overview'),
+  test: (id: string) => api.post<ApiResponse<any>>(`/super-admin/integrations/integrations/${id}/test`),
+  update: (id: string, data: any) => api.patch<ApiResponse<any>>(`/super-admin/integrations/integrations/${id}`, data),
+  webhooks: () => api.get<ApiResponse<any>>('/super-admin/integrations/webhooks'),
+  createWebhook: (data: any) => api.post<ApiResponse<any>>('/super-admin/integrations/webhooks', data),
+  updateWebhook: (id: string, data: any) => api.patch<ApiResponse<any>>(`/super-admin/integrations/webhooks/${id}`, data),
+  deleteWebhook: (id: string) => api.delete<ApiResponse<any>>(`/super-admin/integrations/webhooks/${id}`),
+  deliveries: (webhookId?: string, limit?: number) =>
+    api.get<ApiResponse<any>>('/super-admin/integrations/deliveries', { params: { webhookId, limit } }),
+  retryDelivery: (id: string) =>
+    api.post<ApiResponse<any>>(`/super-admin/integrations/deliveries/${id}/retry`),
+  apiKeys: () => api.get<ApiResponse<any>>('/super-admin/integrations/api-keys'),
+  createApiKey: (data: { name: string; scopes?: string[]; expiresAt?: string | null }) =>
+    api.post<ApiResponse<any>>('/super-admin/integrations/api-keys', data),
   createKey: (data: { name: string; scopes?: string[] }) =>
     api.post<ApiResponse<any>>('/super-admin/integrations/api-keys', data),
-  revokeKey: (id: string) => api.delete<ApiResponse<any>>(`/super-admin/integrations/api-keys/${id}`),
+  revokeApiKey: (id: string) => api.post<ApiResponse<any>>(`/super-admin/integrations/api-keys/${id}/revoke`),
+  revokeKey: (id: string) => api.post<ApiResponse<any>>(`/super-admin/integrations/api-keys/${id}/revoke`),
 };
 
 export const superAdminBackupApi = {
@@ -951,7 +1201,15 @@ export const superAdminBackupApi = {
 };
 
 export const superAdminMonitoringApi = {
-  health: () => api.get<ApiResponse<any>>('/super-admin/system/health'),
+  overview: () => api.get<ApiResponse<any>>('/super-admin/monitoring/overview'),
+  health: () => api.get<ApiResponse<any>>('/super-admin/monitoring/health'),
+  services: () => api.get<ApiResponse<any>>('/super-admin/monitoring/services'),
+  checkService: (id: string) => api.post<ApiResponse<any>>(`/super-admin/monitoring/services/${id}/check`),
+  metrics: (hours?: number) => api.get<ApiResponse<any>>('/super-admin/monitoring/metrics', { params: { hours } }),
+  history: (serviceId?: string, limit?: number) =>
+    api.get<ApiResponse<any>>('/super-admin/monitoring/history', { params: { serviceId, limit } }),
+  live: () => api.get<ApiResponse<any>>('/super-admin/monitoring/health/live'),
+  ready: () => api.get<ApiResponse<any>>('/super-admin/monitoring/health/ready'),
 };
 
 export const superAdminNotificationsApi = {
@@ -1042,6 +1300,66 @@ export const batchApi = {
 
   export: (tenantId?: string) =>
     api.get<ApiResponse<any[]>>('/super-admin/batches/export', { params: { tenantId } }),
+};
+
+// ── CONFIGURATION & FEATURE FLAGS API ──
+export const configurationApi = {
+  getAll: () =>
+    api.get<ApiResponse<any>>('/super-admin/configuration'),
+
+  getByKey: (key: string) =>
+    api.get<ApiResponse<any>>(`/super-admin/configuration/${key}`),
+
+  update: (key: string, value: any) =>
+    api.put<ApiResponse<any>>(`/super-admin/configuration/${key}`, { value }),
+
+  updateBulk: (configs: Array<{ key: string; value: any }>) =>
+    api.put<ApiResponse<any>>('/super-admin/configuration', { configs }),
+
+  getHistory: (page = 1, limit = 50) =>
+    api.get<ApiResponse<any[]>>('/super-admin/configuration/history', { params: { page, limit } }),
+
+  getFeatureFlags: () =>
+    api.get<ApiResponse<any[]>>('/super-admin/feature-flags'),
+
+  updateFeatureFlag: (key: string, data: { isEnabled?: boolean; rolloutPercent?: number }) =>
+    api.put<ApiResponse<any>>(`/super-admin/feature-flags/${key}`, data),
+};
+
+// ── PUBLIC UNRESTRICTED API ──
+export const publicApi = {
+  getPlatform: () =>
+    api.get<ApiResponse<any>>('/public/platform'),
+
+  getCourses: (params?: { page?: number; limit?: number; search?: string; tag?: string }) =>
+    api.get<ApiResponse<{ courses: any[]; total: number; page: number; totalPages: number }>>('/public/courses', { params }),
+
+  getCourse: (id: string) =>
+    api.get<ApiResponse<any>>(`/public/courses/${id}`),
+
+  getProblems: (params?: { page?: number; limit?: number; search?: string; difficulty?: string; tag?: string }) =>
+    api.get<ApiResponse<{ problems: any[]; total: number; page: number; totalPages: number }>>('/public/problems', { params }),
+
+  getProblem: (id: string) =>
+    api.get<ApiResponse<any>>(`/public/problems/${id}`),
+
+  getLanguages: () =>
+    api.get<ApiResponse<{ languages: any[] }>>('/public/languages'),
+
+  getArticles: (params?: { page?: number; limit?: number; search?: string }) =>
+    api.get<ApiResponse<{ articles: any[]; total: number; page: number; totalPages: number }>>('/public/articles', { params }),
+
+  getArticle: (slug: string) =>
+    api.get<ApiResponse<any>>(`/public/articles/${slug}`),
+
+  getFaqs: (category?: string) =>
+    api.get<ApiResponse<{ faqs: any[]; categories: string[] }>>('/public/faqs', { params: { category } }),
+
+  getSystemStatus: () =>
+    api.get<ApiResponse<{ status: string; services: any[]; uptime: number; lastChecked: string }>>('/public/system-status'),
+
+  search: (query: string) =>
+    api.get<ApiResponse<{ courses: any[]; problems: any[]; articles: any[]; faqs: any[] }>>('/public/search', { params: { q: query } }),
 };
 
 // Error handling utility

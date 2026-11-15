@@ -23,6 +23,21 @@ import { blogRouter } from './routes/blog.routes';
 import { newsletterRouter } from './routes/newsletter.routes';
 import { notificationRouter, announcementRouter } from './routes/notification.routes';
 import { batchRouter } from './routes/batch.routes';
+import { approvalsRouter } from './routes/approvals.routes';
+import { supportRouter } from './routes/support.routes';
+import { contentRouter, publicContentRouter } from './routes/content.routes';
+import { seoRouter, publicSeoRouter } from './routes/seo.routes';
+import { helpCenterRouter, publicHelpCenterRouter } from './routes/help-center.routes';
+import { communityRouter } from './routes/community.routes';
+import { blogAdminRouter } from './routes/blog-admin.routes';
+import {
+  monitoringRouter,
+  executionAdminRouter,
+  securityAdminRouter,
+  logsAdminRouter,
+  integrationsAdminRouter,
+} from './routes/system-security.routes';
+import { publicRouter } from './routes/public.routes';
 import { platformRouter } from './routes/platform.routes';
 import { globalRateLimiter } from './middleware/rateLimit';
 import { errorHandler } from './middleware/errorHandler';
@@ -100,6 +115,18 @@ export function createApp(): Application {
   app.use('/api/v1/super-admin/users', userRouter);
   app.use('/api/v1/super-admin/batches', batchRouter);
   app.use('/api/v1/batches', batchRouter);
+  app.use('/api/v1/super-admin/approvals', approvalsRouter);
+  app.use('/api/v1/super-admin/support', supportRouter);
+  app.use('/api/v1/super-admin/content', contentRouter);
+  app.use('/api/v1/super-admin/seo', seoRouter);
+  app.use('/api/v1/super-admin/help-center', helpCenterRouter);
+  app.use('/api/v1/super-admin/community', communityRouter);
+  app.use('/api/v1/super-admin/blog', blogAdminRouter);
+  app.use('/api/v1/super-admin/monitoring', monitoringRouter);
+  app.use('/api/v1/super-admin/execution', executionAdminRouter);
+  app.use('/api/v1/super-admin/security', securityAdminRouter);
+  app.use('/api/v1/super-admin/logs', logsAdminRouter);
+  app.use('/api/v1/super-admin/integrations', integrationsAdminRouter);
   app.use('/api/v1/super-admin', superAdminDashboardRouter);
   app.use('/api/v1/courses', courseRouter);
   app.use('/api/v1', courseCompatRouter);
@@ -113,9 +140,17 @@ export function createApp(): Application {
   app.use('/api/v1', quizCompatRouter);
   app.use('/api/v1/analytics', analyticsRouter);
   app.use('/api/v1/blog', blogRouter);
+  app.use('/api/v1/content', publicContentRouter);
+  app.use('/api/v1/help-center', publicHelpCenterRouter);
+  app.use('/api/v1/community', communityRouter);
+  app.use('/api/v1/seo', publicSeoRouter);
+  app.use('/sitemap.xml', publicSeoRouter);
+  app.use('/robots.txt', publicSeoRouter);
   app.use('/api/v1/newsletter', newsletterRouter);
   app.use('/api/v1/notifications', notificationRouter);
   app.use('/api/v1/announcements', announcementRouter);
+  app.use('/api/v1/public', publicRouter);
+  app.use('/api/public', publicRouter);
   app.use('/api/v1', platformRouter);
 
   // ── 404 handler ───────────────────────────────────────────────────────────

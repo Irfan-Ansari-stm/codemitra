@@ -62,6 +62,48 @@ export default function CodeEditor({
     toggleTheme();
   };
 
+  const handleEditorBeforeMount = (monaco: any) => {
+    monaco.editor.defineTheme('light', {
+      base: 'vs',
+      inherit: true,
+      rules: [
+        { token: 'comment', foreground: '64748b', fontStyle: 'italic' },
+        { token: 'keyword', foreground: '2563eb', fontStyle: 'bold' },
+        { token: 'string', foreground: '059669' },
+        { token: 'number', foreground: 'd97706' },
+      ],
+      colors: {
+        'editor.background': '#ffffff',
+        'editor.foreground': '#0f172a',
+        'editorLineNumber.foreground': '#94a3b8',
+        'editorLineNumber.activeForeground': '#2563eb',
+        'editor.lineHighlightBackground': '#f8fafc',
+        'editor.selectionBackground': '#bfdbfe80',
+        'editorCursor.foreground': '#2563eb',
+      },
+    });
+
+    monaco.editor.defineTheme('vs-dark', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: 'comment', foreground: '64748b', fontStyle: 'italic' },
+        { token: 'keyword', foreground: '38bdf8', fontStyle: 'bold' },
+        { token: 'string', foreground: '34d399' },
+        { token: 'number', foreground: 'fbbf24' },
+      ],
+      colors: {
+        'editor.background': '#020817',
+        'editor.foreground': '#f8fafc',
+        'editorLineNumber.foreground': '#475569',
+        'editorLineNumber.activeForeground': '#38bdf8',
+        'editor.lineHighlightBackground': '#0f172a80',
+        'editor.selectionBackground': '#1e3a8a60',
+        'editorCursor.foreground': '#38bdf8',
+      },
+    });
+  };
+
   const languages = Object.entries(LANGUAGES).map(([id, language]) => ({
     id: Number(id),
     ...language,
@@ -227,6 +269,7 @@ export default function CodeEditor({
         <div className="flex-1 overflow-hidden min-h-[300px]">
           <MonacoEditor
             theme={activeTheme}
+            beforeMount={handleEditorBeforeMount}
             defaultLanguage="python"
             language={currentLanguage?.monacoLang || 'python'}
             value={getCode(problemId, languageId)}

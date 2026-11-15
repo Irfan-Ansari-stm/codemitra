@@ -81,6 +81,7 @@ export const blogStatusEnum = pgEnum('blog_status', [
   'draft',
   'published',
   'archived',
+  'scheduled',
 ]);
 
 export const notificationTypeEnum = pgEnum('notification_type', [
@@ -572,13 +573,18 @@ export const supportTickets = pgTable('support_tickets', {
   tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
   subject: varchar('subject', { length: 500 }).notNull(),
   description: text('description').notNull(),
-  category: varchar('category', { length: 50 }).notNull().default('general'),
-  priority: varchar('priority', { length: 20 }).notNull().default('medium'),
-  status: varchar('status', { length: 30 }).notNull().default('open'),
+  category: varchar('category', { length: 100 }).notNull().default('General Query'),
+  priority: varchar('priority', { length: 50 }).notNull().default('medium'),
+  status: varchar('status', { length: 50 }).notNull().default('open'),
   assignedTo: uuid('assigned_to').references(() => users.id, { onDelete: 'set null' }),
+  department: varchar('department', { length: 100 }).default('Customer Support'),
+  firstResponseAt: timestamp('first_response_at', { withTimezone: true }),
   resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+  lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
 });
 
 export const supportTicketReplies = pgTable('support_ticket_replies', {
@@ -587,6 +593,42 @@ export const supportTicketReplies = pgTable('support_ticket_replies', {
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   message: text('message').notNull(),
   isInternal: boolean('is_internal').notNull().default(false),
+  messageType: varchar('message_type', { length: 50 }).notNull().default('USER_REPLY'),
+  attachments: jsonb('attachments').default(sql`'[]'::jsonb`),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const supportAttachments = pgTable('support_attachments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ticketId: uuid('ticket_id').notNull().references(() => supportTickets.id, { onDelete: 'cascade' }),
+  messageId: uuid('message_id').references(() => supportTicketReplies.id, { onDelete: 'set null' }),
+  uploadedBy: uuid('uploaded_by').references(() => users.id, { onDelete: 'set null' }),
+  fileName: varchar('file_name', { length: 255 }).notNull(),
+  storageKey: text('storage_key'),
+  mimeType: varchar('mime_type', { length: 100 }),
+  fileSize: integer('file_size'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const supportAssignmentHistory = pgTable('support_assignment_history', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ticketId: uuid('ticket_id').notNull().references(() => supportTickets.id, { onDelete: 'cascade' }),
+  assignedBy: uuid('assigned_by').references(() => users.id, { onDelete: 'set null' }),
+  assignedTo: uuid('assigned_to').references(() => users.id, { onDelete: 'set null' }),
+  previousAssignee: uuid('previous_assignee').references(() => users.id, { onDelete: 'set null' }),
+  note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const supportTicketActivity = pgTable('support_ticket_activity', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ticketId: uuid('ticket_id').notNull().references(() => supportTickets.id, { onDelete: 'cascade' }),
+  actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
+  action: varchar('action', { length: 100 }).notNull(),
+  oldValue: text('old_value'),
+  newValue: text('new_value'),
+  description: text('description'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -923,6 +965,9 @@ export type AuditLog = typeof auditLogs.$inferSelect;
 export type UserStats = typeof userStats.$inferSelect;
 export type SupportTicket = typeof supportTickets.$inferSelect;
 export type SupportTicketReply = typeof supportTicketReplies.$inferSelect;
+export type SupportAttachment = typeof supportAttachments.$inferSelect;
+export type SupportAssignmentHistory = typeof supportAssignmentHistory.$inferSelect;
+export type SupportTicketActivity = typeof supportTicketActivity.$inferSelect;
 export type Incident = typeof incidents.$inferSelect;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type DatabaseBackup = typeof databaseBackups.$inferSelect;
@@ -1017,3 +1062,431 @@ export type NewIdeExecution = typeof ideExecutions.$inferInsert;
 export type IdeSetting = typeof ideSettings.$inferSelect;
 export type NewIdeSetting = typeof ideSettings.$inferInsert;
 export type IdeOpenTab = typeof ideOpenTabs.$inferSelect;
+
+// =============================================================================
+// CONTENT & MARKETING TABLES
+// =============================================================================
+
+export const contentPages = pgTable('content_pages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  slug: varchar('slug', { length: 255 }).notNull().unique(),
+  title: varchar('title', { length: 255 }).notNull(),
+  content: text('content').notNull(),
+  excerpt: text('excerpt'),
+  pageType: varchar('page_type', { length: 50 }).notNull().default('page'),
+  category: varchar('category', { length: 100 }),
+  featuredImage: text('featured_image'),
+  status: varchar('status', { length: 50 }).notNull().default('draft'),
+  isFeatured: boolean('is_featured').notNull().default(false),
+  seoTitle: varchar('seo_title', { length: 150 }),
+  seoDescription: varchar('seo_description', { length: 255 }),
+  keywords: text('keywords').array().default(sql`'{}'::text[]`),
+  authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
+  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+  scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
+  viewCount: integer('view_count').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const contentBanners = pgTable('content_banners', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: varchar('title', { length: 255 }).notNull(),
+  subtitle: varchar('subtitle', { length: 255 }),
+  description: text('description'),
+  content: text('content'),
+  desktopImage: text('desktop_image'),
+  mobileImage: text('mobile_image'),
+  imageUrl: text('image_url'),
+  linkUrl: text('link_url'),
+  ctaText: varchar('cta_text', { length: 100 }),
+  ctaUrl: text('cta_url'),
+  targetAudience: varchar('target_audience', { length: 100 }).notNull().default('all'),
+  position: varchar('position', { length: 50 }).notNull().default('top'),
+  priority: integer('priority').notNull().default(0),
+  isActive: boolean('is_active').notNull().default(true),
+  status: varchar('status', { length: 50 }).notNull().default('active'),
+  startDate: timestamp('start_date', { withTimezone: true }),
+  endDate: timestamp('end_date', { withTimezone: true }),
+  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const contentFaqs = pgTable('content_faqs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  question: text('question').notNull(),
+  answer: text('answer').notNull(),
+  category: varchar('category', { length: 100 }).notNull().default('General'),
+  displayOrder: integer('display_order').notNull().default(0),
+  sortOrder: integer('sort_order').notNull().default(0),
+  isActive: boolean('is_active').notNull().default(true),
+  status: varchar('status', { length: 50 }).notNull().default('published'),
+  visibility: varchar('visibility', { length: 50 }).notNull().default('public'),
+  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const seoSettings = pgTable('seo_settings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  siteTitle: varchar('site_title', { length: 255 }).notNull().default('CodeVerse'),
+  siteDescription: text('site_description'),
+  defaultKeywords: text('default_keywords').array().default(sql`'{}'::text[]`),
+  canonicalBaseUrl: text('canonical_base_url').default('https://codeverse.dev'),
+  defaultOgImage: text('default_og_image'),
+  ogTitle: varchar('og_title', { length: 255 }),
+  ogDescription: text('og_description'),
+  twitterHandle: varchar('twitter_handle', { length: 100 }),
+  twitterCardType: varchar('twitter_card_type', { length: 50 }).default('summary_large_image'),
+  defaultLanguage: varchar('default_language', { length: 20 }).default('en'),
+  indexingPreference: varchar('indexing_preference', { length: 50 }).default('all'),
+  robotsTxt: text('robots_txt').default('User-agent: *\nAllow: /'),
+  sitemapEnabled: boolean('sitemap_enabled').default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const seoRedirects = pgTable('seo_redirects', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sourcePath: varchar('source_path', { length: 500 }).notNull().unique(),
+  targetPath: varchar('target_path', { length: 500 }).notNull(),
+  statusCode: integer('status_code').notNull().default(301),
+  isActive: boolean('is_active').notNull().default(true),
+  hitCount: integer('hit_count').notNull().default(0),
+  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const helpCategories = pgTable('help_categories', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: varchar('name', { length: 150 }).notNull(),
+  slug: varchar('slug', { length: 150 }).notNull().unique(),
+  description: text('description'),
+  icon: varchar('icon', { length: 100 }).default('BookOpen'),
+  displayOrder: integer('display_order').notNull().default(0),
+  parentId: uuid('parent_id'),
+  isVisible: boolean('is_visible').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const helpArticles = pgTable('help_articles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  categoryId: uuid('category_id').references(() => helpCategories.id, { onDelete: 'set null' }),
+  category: varchar('category', { length: 150 }),
+  subcategory: varchar('subcategory', { length: 150 }),
+  title: varchar('title', { length: 255 }).notNull(),
+  slug: varchar('slug', { length: 255 }).notNull().unique(),
+  shortDescription: text('short_description'),
+  content: text('content').notNull(),
+  featuredImage: text('featured_image'),
+  status: varchar('status', { length: 50 }).notNull().default('published'),
+  isPublished: boolean('is_published').notNull().default(true),
+  isFeatured: boolean('is_featured').notNull().default(false),
+  seoTitle: varchar('seo_title', { length: 150 }),
+  seoDescription: varchar('seo_description', { length: 255 }),
+  keywords: text('keywords').array().default(sql`'{}'::text[]`),
+  helpfulCount: integer('helpful_count').notNull().default(0),
+  notHelpfulCount: integer('not_helpful_count').notNull().default(0),
+  viewCount: integer('view_count').notNull().default(0),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const communityCategories = pgTable('community_categories', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: varchar('name', { length: 150 }).notNull(),
+  slug: varchar('slug', { length: 150 }).notNull().unique(),
+  description: text('description'),
+  icon: varchar('icon', { length: 100 }).default('MessageSquare'),
+  displayOrder: integer('display_order').notNull().default(0),
+  color: varchar('color', { length: 50 }).default('#3B82F6'),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const communityThreads = pgTable('community_threads', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  authorId: uuid('author_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  categoryId: uuid('category_id').references(() => communityCategories.id, { onDelete: 'set null' }),
+  title: varchar('title', { length: 300 }).notNull(),
+  slug: varchar('slug', { length: 350 }).notNull().unique(),
+  content: text('content').notNull(),
+  tags: text('tags').array().default(sql`'{}'::text[]`),
+  status: varchar('status', { length: 50 }).notNull().default('open'),
+  moderationStatus: varchar('moderation_status', { length: 50 }).notNull().default('approved'),
+  isPinned: boolean('is_pinned').notNull().default(false),
+  isLocked: boolean('is_locked').notNull().default(false),
+  isResolved: boolean('is_resolved').notNull().default(false),
+  upvotes: integer('upvotes').notNull().default(0),
+  viewCount: integer('view_count').notNull().default(0),
+  replyCount: integer('reply_count').notNull().default(0),
+  lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const communityReplies = pgTable('community_replies', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  threadId: uuid('thread_id').notNull().references(() => communityThreads.id, { onDelete: 'cascade' }),
+  authorId: uuid('author_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  parentReplyId: uuid('parent_reply_id'),
+  content: text('content').notNull(),
+  isBestAnswer: boolean('is_best_answer').notNull().default(false),
+  isPinned: boolean('is_pinned').notNull().default(false),
+  isHidden: boolean('is_hidden').notNull().default(false),
+  upvotes: integer('upvotes').notNull().default(0),
+  moderationStatus: varchar('moderation_status', { length: 50 }).notNull().default('approved'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const communityReports = pgTable('community_reports', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  reporterId: uuid('reporter_id').references(() => users.id, { onDelete: 'set null' }),
+  reportType: varchar('report_type', { length: 50 }).notNull(),
+  targetThreadId: uuid('target_thread_id').references(() => communityThreads.id, { onDelete: 'cascade' }),
+  targetReplyId: uuid('target_reply_id').references(() => communityReplies.id, { onDelete: 'cascade' }),
+  targetUserId: uuid('target_user_id').references(() => users.id, { onDelete: 'set null' }),
+  reason: varchar('reason', { length: 100 }).notNull(),
+  description: text('description'),
+  status: varchar('status', { length: 50 }).notNull().default('pending'),
+  moderatorId: uuid('moderator_id').references(() => users.id, { onDelete: 'set null' }),
+  moderationAction: varchar('moderation_action', { length: 50 }),
+  resolutionNote: text('resolution_note'),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SYSTEM MONITORING, SECURITY & INTEGRATIONS TABLES
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const serviceRegistry = pgTable('service_registry', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: varchar('name', { length: 100 }).notNull().unique(),
+  slug: varchar('slug', { length: 50 }).notNull().unique(),
+  description: text('description'),
+  serviceType: varchar('service_type', { length: 50 }).notNull().default('internal'),
+  endpointUrl: text('endpoint_url'),
+  status: varchar('status', { length: 30 }).notNull().default('operational'),
+  probeLatencyMs: integer('probe_latency_ms').notNull().default(0),
+  uptimeTarget: numeric('uptime_target', { precision: 5, scale: 2 }).notNull().default('99.95'),
+  lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }).notNull().defaultNow(),
+  metadata: jsonb('metadata').notNull().default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const serviceHealthHistory = pgTable('service_health_history', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  serviceId: uuid('service_id').references(() => serviceRegistry.id, { onDelete: 'cascade' }),
+  status: varchar('status', { length: 30 }).notNull(),
+  latencyMs: integer('latency_ms').notNull().default(0),
+  responseCode: integer('response_code'),
+  errorMessage: text('error_message'),
+  checkedAt: timestamp('checked_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const systemMetrics = pgTable('system_metrics', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  cpuUsagePercent: numeric('cpu_usage_percent', { precision: 5, scale: 2 }).notNull().default('0'),
+  memoryRssMb: integer('memory_rss_mb').notNull().default(0),
+  memoryHeapUsedMb: integer('memory_heap_used_mb').notNull().default(0),
+  memoryHeapTotalMb: integer('memory_heap_total_mb').notNull().default(0),
+  databaseLatencyMs: integer('database_latency_ms').notNull().default(0),
+  databaseConnectionsActive: integer('database_connections_active').notNull().default(0),
+  databaseConnectionsIdle: integer('database_connections_idle').notNull().default(0),
+  apiLatencyMs: integer('api_latency_ms').notNull().default(0),
+  recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const executionLanguages = pgTable('execution_languages', {
+  id: integer('id').primaryKey(),
+  name: varchar('name', { length: 50 }).notNull(),
+  slug: varchar('slug', { length: 50 }).notNull().unique(),
+  extension: varchar('extension', { length: 20 }).notNull(),
+  monacoLang: varchar('monaco_lang', { length: 50 }).notNull(),
+  version: varchar('version', { length: 50 }).notNull().default('Latest'),
+  runtime: varchar('runtime', { length: 50 }).notNull().default('Native'),
+  engine: varchar('engine', { length: 30 }).notNull().default('hybrid'),
+  wasmSupported: boolean('wasm_supported').notNull().default(true),
+  judge0Supported: boolean('judge0_supported').notNull().default(true),
+  isActive: boolean('is_active').notNull().default(true),
+  displayOrder: integer('display_order').notNull().default(0),
+  notes: text('notes'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const executionNodes = pgTable('execution_nodes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: varchar('name', { length: 100 }).notNull(),
+  nodeType: varchar('node_type', { length: 50 }).notNull().default('judge0'),
+  hostUrl: text('host_url').notNull(),
+  status: varchar('status', { length: 30 }).notNull().default('healthy'),
+  currentQueue: integer('current_queue').notNull().default(0),
+  maxConcurrency: integer('max_concurrency').notNull().default(50),
+  latencyMs: integer('latency_ms').notNull().default(0),
+  isActive: boolean('is_active').notNull().default(true),
+  isDevelopmentFixture: boolean('is_development_fixture').notNull().default(false),
+  lastHealthCheckAt: timestamp('last_health_check_at', { withTimezone: true }).notNull().defaultNow(),
+  metadata: jsonb('metadata').notNull().default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const executionLimits = pgTable('execution_limits', {
+  id: varchar('id', { length: 50 }).primaryKey(),
+  name: varchar('name', { length: 100 }).notNull(),
+  maxExecutionTimeMs: integer('max_execution_time_ms').notNull().default(3000),
+  maxMemoryMb: integer('max_memory_mb').notNull().default(256),
+  maxOutputSizeBytes: integer('max_output_size_bytes').notNull().default(131072),
+  maxConcurrentRuns: integer('max_concurrent_runs').notNull().default(10),
+  rateLimitPerMinute: integer('rate_limit_per_minute').notNull().default(60),
+  updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const executionMetrics = pgTable('execution_metrics', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  date: timestamp('date', { mode: 'string' }).notNull().unique(),
+  totalRuns: integer('total_runs').notNull().default(0),
+  successfulRuns: integer('successful_runs').notNull().default(0),
+  failedRuns: integer('failed_runs').notNull().default(0),
+  timeoutRuns: integer('timeout_runs').notNull().default(0),
+  wasmRuns: integer('wasm_runs').notNull().default(0),
+  judge0Runs: integer('judge0_runs').notNull().default(0),
+  avgLatencyMs: numeric('avg_latency_ms', { precision: 8, scale: 2 }).notNull().default('0'),
+  avgMemoryMb: numeric('avg_memory_mb', { precision: 8, scale: 2 }).notNull().default('0'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const userSessions = pgTable('user_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tokenHash: text('token_hash').notNull(),
+  ipAddress: varchar('ip_address', { length: 45 }),
+  userAgent: text('user_agent'),
+  deviceInfo: varchar('device_info', { length: 100 }),
+  isActive: boolean('is_active').notNull().default(true),
+  isRevoked: boolean('is_revoked').notNull().default(false),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  revokedBy: uuid('revoked_by').references(() => users.id, { onDelete: 'set null' }),
+  lastActiveAt: timestamp('last_active_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const accountLockouts = pgTable('account_lockouts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  email: varchar('email', { length: 255 }).notNull(),
+  lockReason: text('lock_reason').notNull().default('Excessive failed login attempts'),
+  failedAttempts: integer('failed_attempts').notNull().default(5),
+  lockedAt: timestamp('locked_at', { withTimezone: true }).notNull().defaultNow(),
+  lockExpiresAt: timestamp('lock_expires_at', { withTimezone: true }).notNull(),
+  unlockedAt: timestamp('unlocked_at', { withTimezone: true }),
+  unlockedBy: uuid('unlocked_by').references(() => users.id, { onDelete: 'set null' }),
+  unlockReason: text('unlock_reason'),
+  status: varchar('status', { length: 30 }).notNull().default('locked'),
+  ipAddress: varchar('ip_address', { length: 45 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const loginAttempts = pgTable('login_attempts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: varchar('email', { length: 255 }).notNull(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+  isSuccess: boolean('is_success').notNull().default(false),
+  failureReason: text('failure_reason'),
+  ipAddress: varchar('ip_address', { length: 45 }),
+  userAgent: text('user_agent'),
+  attemptedAt: timestamp('attempted_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const securityControls = pgTable('security_controls', {
+  id: varchar('id', { length: 50 }).primaryKey(),
+  name: varchar('name', { length: 100 }).notNull(),
+  category: varchar('category', { length: 50 }).notNull().default('authentication'),
+  description: text('description').notNull(),
+  value: jsonb('value').notNull().default({}),
+  isEnabled: boolean('is_enabled').notNull().default(true),
+  updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const complianceChecks = pgTable('compliance_checks', {
+  id: varchar('id', { length: 50 }).primaryKey(),
+  name: varchar('name', { length: 150 }).notNull(),
+  standard: varchar('standard', { length: 50 }).notNull().default('SOC2 / ISO27001'),
+  description: text('description').notNull(),
+  status: varchar('status', { length: 30 }).notNull().default('compliant'),
+  lastAssessedAt: timestamp('last_assessed_at', { withTimezone: true }).notNull().defaultNow(),
+  assessedBy: varchar('assessed_by', { length: 100 }).default('Automated Policy Auditor'),
+});
+
+export const authenticationHistory = pgTable('authentication_history', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+  userName: varchar('user_name', { length: 255 }),
+  userEmail: varchar('user_email', { length: 255 }),
+  eventType: varchar('event_type', { length: 50 }).notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('success'),
+  ipAddress: varchar('ip_address', { length: 45 }),
+  userAgent: text('user_agent'),
+  metadata: jsonb('metadata').notNull().default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const integrations = pgTable('integrations', {
+  id: varchar('id', { length: 50 }).primaryKey(),
+  name: varchar('name', { length: 100 }).notNull(),
+  provider: varchar('provider', { length: 50 }).notNull(),
+  integrationType: varchar('integration_type', { length: 50 }).notNull(),
+  description: text('description'),
+  endpointUrl: text('endpoint_url'),
+  connectionStatus: varchar('connection_status', { length: 30 }).notNull().default('ready'),
+  isEnabled: boolean('is_enabled').notNull().default(true),
+  lastHealthCheckAt: timestamp('last_health_check_at', { withTimezone: true }).notNull().defaultNow(),
+  lastError: text('last_error'),
+  configuration: jsonb('configuration').notNull().default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const webhookEndpoints = pgTable('webhook_endpoints', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: varchar('name', { length: 100 }).notNull(),
+  targetUrl: text('target_url').notNull(),
+  subscribedEvents: text('subscribed_events').array().notNull().default(sql`'{}'::text[]`),
+  signingSecretHash: text('signing_secret_hash').notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  retryCount: integer('retry_count').notNull().default(3),
+  timeoutSeconds: integer('timeout_seconds').notNull().default(10),
+  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const webhookDeliveries = pgTable('webhook_deliveries', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  webhookId: uuid('webhook_id').notNull().references(() => webhookEndpoints.id, { onDelete: 'cascade' }),
+  eventType: varchar('event_type', { length: 100 }).notNull(),
+  payload: jsonb('payload').notNull().default({}),
+  status: varchar('status', { length: 30 }).notNull().default('success'),
+  statusCode: integer('status_code'),
+  responseBody: text('response_body'),
+  attemptNumber: integer('attempt_number').notNull().default(1),
+  nextRetryAt: timestamp('next_retry_at', { withTimezone: true }),
+  deliveredAt: timestamp('delivered_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+

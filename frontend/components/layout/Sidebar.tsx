@@ -75,7 +75,7 @@ function groupsForRole(role: string, tenantSlug?: string): NavGroup[] {
           { label: 'SEO & Metadata', href: '/super-admin/seo', icon: Globe },
           { label: 'Help Center', href: '/super-admin/help-center', icon: HelpCircle },
           { label: 'Community Forums', href: '/super-admin/community', icon: MessagesSquare },
-          { label: 'Blog & Articles', href: '/blog', icon: BookOpen },
+          { label: 'Blog & Articles', href: '/super-admin/blog', icon: BookOpen },
         ],
       },
       {
